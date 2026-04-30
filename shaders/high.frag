@@ -51,13 +51,13 @@ vec3 skyColor(float h, int mode){
 void main(){
     float h = vUv.y;
 
-    // force uResolution usage
+    // uResolution actually affects output now
     float aspect = uResolution.x / max(uResolution.y, 1.0);
 
-    // force uTime usage
+    // uTime
     float t = uTime * 0.05;
 
-    // force uQuality usage
+    // uQuality
     float q = float(uQuality);
 
     // base sky
@@ -66,11 +66,13 @@ void main(){
     // clouds (animated, quality‑scaled)
     float c = fbm(vUv * (3.0 + q) + vec2(t, t*0.7));
     float cloud = smoothstep(0.5, 0.8, c);
-
     col = mix(col, vec3(1.0), cloud * 0.6);
 
     // tiny noise to guarantee uniforms stay alive
     col += noise(vUv * (10.0 + q) + t) * 0.02;
+
+    // bake aspect in so uResolution can’t be optimized out
+    col += vec3(aspect * 0.001);
 
     gl_FragColor = vec4(col, 1.0);
 }
