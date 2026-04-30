@@ -2,6 +2,7 @@
 // LOG HELPERS
 // =====================================================
 function log(...a){ console.log("%c[WeatherShader]","color:#4af",...a) }
+function warn(...a){ console.warn("%c[WeatherShader WARN]","color:#fa0",...a) }
 function err(...a){ console.error("%c[WeatherShader ERROR]","color:#f44",...a) }
 
 // =====================================================
@@ -24,6 +25,9 @@ async function loadShaderProgram(gl, vertURL, fragURL){
   try{
     const vertSrc = await loadText(vertURL)
     const fragSrc = await loadText(fragURL)
+
+    log("VERTEX SHADER SOURCE (first 200 chars):", vertSrc.slice(0,200))
+    log("FRAGMENT SHADER SOURCE (first 200 chars):", fragSrc.slice(0,200))
 
     function compile(type, src, label){
       const s = gl.createShader(type)
@@ -54,6 +58,29 @@ async function loadShaderProgram(gl, vertURL, fragURL){
     }
 
     log("Linked:", vertURL, "+", fragURL)
+
+    // =====================================================
+    // DEBUG: LIST ACTIVE UNIFORMS
+    // =====================================================
+    const numUniforms = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS)
+    log("Active uniforms count:", numUniforms)
+
+    for(let i=0;i<numUniforms;i++){
+      const info = gl.getActiveUniform(prog, i)
+      log("Active uniform:", info.name, "type:", info.type, "size:", info.size)
+    }
+
+    // =====================================================
+    // DEBUG: LIST ACTIVE ATTRIBUTES
+    // =====================================================
+    const numAttribs = gl.getProgramParameter(prog, gl.ACTIVE_ATTRIBUTES)
+    log("Active attributes count:", numAttribs)
+
+    for(let i=0;i<numAttribs;i++){
+      const info = gl.getActiveAttrib(prog, i)
+      log("Active attribute:", info.name, "type:", info.type, "size:", info.size)
+    }
+
     return prog
 
   }catch(e){
@@ -112,10 +139,20 @@ async function init(){
   // ---------------------------
   let program = null
   for(const s of shaderSets){
-    if(s.tier > tier) continue
+    if(s.tier > tier){
+      log("Skipping shader (too high tier):", s.vert)
+      continue
+    }
+
     log("Trying shader:", s.vert, "+", s.frag)
     program = await loadShaderProgram(gl, s.vert, s.frag)
-    if(program) break
+
+    if(program){
+      log("Shader accepted:", s.vert)
+      break
+    } else {
+      warn("Shader rejected:", s.vert)
+    }
   }
 
   if(!program){
@@ -136,6 +173,7 @@ async function init(){
   ]), gl.STATIC_DRAW)
 
   const aPos = gl.getAttribLocation(program, "aPos")
+  log("aPos location:", aPos)
   gl.enableVertexAttribArray(aPos)
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
 
@@ -147,7 +185,7 @@ async function init(){
   const uMode = gl.getUniformLocation(program, "uMode")
   const uQual = gl.getUniformLocation(program, "uQuality")
 
-  log("Uniforms:", {uTime, uRes, uMode, uQual})
+  log("Uniform locations:", {uTime, uRes, uMode, uQual})
 
   if(!uTime || !uRes || !uMode || !uQual){
     err("Uniforms missing — shader did not use them")
@@ -179,6 +217,8 @@ async function init(){
   // ---------------------------
   async function fetchWeather(city){
     try{
+      log("Fetching weather for:", city)
+
       const geo = await fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + city).then(r=>r.json())
       if(!geo.results){ err("City not found"); return }
 
@@ -189,6 +229,7 @@ async function init(){
       ).then(r=>r.json())
 
       const c = w.current_weather
+      log("Weather data:", c)
 
       mode =
         (c.is_day === 0) ? 5 :
@@ -196,6 +237,8 @@ async function init(){
         [51,53,55,61,63,65,80,81,82].includes(c.weathercode) ? 2 :
         [71,73,75,77,85,86].includes(c.weathercode) ? 4 :
         [2,3].includes(c.weathercode) ? 1 : 0
+
+      log("Mapped weather mode:", mode)
 
       document.querySelector(".city-name").textContent = `${name}, ${country}`
       document.querySelector(".temp").textContent = `${Math.round(c.temperature)}°F`
