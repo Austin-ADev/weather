@@ -82,10 +82,11 @@ async function init(){
   // SHADER LOAD ORDER
   // ---------------------------
   const shaderSets=[
-    {tier:2, vert:"shaders/ultra.vert", frag:"shaders/ultra.frag"},
-    {tier:1, vert:"shaders/high.vert",  frag:"shaders/high.frag"},
-    {tier:0, vert:"shaders/perf.vert",  frag:"shaders/perf.frag"}
-  ]
+  {tier:2, vert:"shaders/ultra.vert?v=3", frag:"shaders/ultra.frag?v=3"},
+  {tier:1, vert:"shaders/high.vert?v=3",  frag:"shaders/high.frag?v=3"},
+  {tier:0, vert:"shaders/perf.vert?v=3",  frag:"shaders/perf.frag?v=3"}
+]
+
 
   let program=null
   for(const s of shaderSets){
