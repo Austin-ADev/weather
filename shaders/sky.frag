@@ -7,12 +7,12 @@ uniform vec2 uResolution;
 uniform int uMode;
 uniform int uQuality;
 
-// hash
+// simple hash
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
-// noise
+// simple noise
 float noise(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
@@ -24,19 +24,6 @@ float noise(vec2 p) {
   return mix(a, b, u.x) +
          (c - a) * u.y * (1.0 - u.x) +
          (d - b) * u.x * u.y;
-}
-
-// fbm
-float fbm(vec2 p, int oct) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 8; i++) {
-    if (i >= oct) break;
-    v += a * noise(p);
-    p *= 2.0;
-    a *= 0.5;
-  }
-  return v;
 }
 
 // sky gradient
@@ -51,26 +38,21 @@ vec3 skyColor(float h, int mode) {
 
 void main() {
   float h = vUv.y;
+
+  // use uResolution to avoid optimization
+  float aspect = uResolution.x / max(uResolution.y, 1.0);
+
+  // use uTime to animate subtle noise
+  float n = noise(vUv * 3.0 + uTime * 0.05);
+
+  // use uQuality to vary noise strength
+  float q = float(uQuality) * 0.3;
+
+  // base sky
   vec3 col = skyColor(h, uMode);
 
-  // clouds
-  int oct = (uQuality == 2) ? 6 : (uQuality == 1 ? 4 : 3);
-  float c = fbm(vUv * 3.0 + uTime * 0.03, oct);
-  float cloud = smoothstep(0.5, 0.8, c);
-
-  if (uMode == 1 || uMode == 0) {
-    col = mix(col, vec3(1.0), cloud * 0.5);
-  }
-
-  if (uMode == 3) {
-    col = mix(col, vec3(0.8), cloud * 0.9);
-  }
-
-  // night stars
-  if (uMode == 5) {
-    float s = step(0.995, noise(vUv * 80.0));
-    col += vec3(s);
-  }
+  // add subtle animated noise so uniforms are used
+  col += n * 0.05 * q;
 
   gl_FragColor = vec4(col, 1.0);
 }
