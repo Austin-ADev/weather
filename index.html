@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hyper‑Realistic Weather</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <!-- SKYBOX LAYERS -->
+  <div id="sky">
+    <div class="sky-layer sky-base"></div>
+    <div class="sky-layer sky-clouds"></div>
+    <div class="sky-layer sky-fog"></div>
+    <div class="sky-layer sky-rain"></div>
+    <div class="sky-layer sky-snow"></div>
+    <div class="sky-layer sky-lightning"></div>
+    <div class="sky-layer sky-sun"></div>
+    <div class="sky-layer sky-stars"></div>
+  </div>
+
+  <!-- UI -->
+  <div class="container">
+    <header>
+      <h1>WEATHER DASHBOARD</h1>
+      <input id="citySearch" placeholder="Search city...">
+    </header>
+
+    <section class="weather-card">
+      <h2 class="city-name">Loading...</h2>
+      <div class="temp">--°F</div>
+      <div class="condition">---</div>
+    </section>
+
+    <section class="details">
+      <div class="detail-box"><span>Humidity</span><strong>--</strong></div>
+      <div class="detail-box"><span>Wind</span><strong>--</strong></div>
+      <div class="detail-box"><span>Feels Like</span><strong>--</strong></div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

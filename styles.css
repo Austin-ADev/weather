@@ -1,0 +1,172 @@
+/* ============================================================
+   GLOBAL
+   ============================================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+body {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #f5f7fb;
+  background: #000;
+}
+
+/* ============================================================
+   SKYBOX LAYERS
+   ============================================================ */
+#sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sky-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+
+/* BASE SKY (clear, cloudy, storm, night) */
+.sky-base {
+  z-index: 1;
+}
+
+/* CLOUDS (soft CGI or storm CGI) */
+.sky-clouds {
+  z-index: 2;
+  background-repeat: no-repeat;
+  animation: cloudsMove 120s linear infinite;
+  opacity: 0;
+}
+
+@keyframes cloudsMove {
+  from { transform: translateX(0); }
+  to { transform: translateX(-8%); }
+}
+
+/* FOG */
+.sky-fog {
+  z-index: 3;
+  background-size: 120%;
+  opacity: 0;
+  animation: fogDrift 60s ease-in-out infinite alternate;
+}
+
+@keyframes fogDrift {
+  from { transform: translateX(-2%); }
+  to { transform: translateX(2%); }
+}
+
+/* RAIN */
+.sky-rain {
+  z-index: 4;
+  background-size: cover;
+  opacity: 0;
+  animation: rainMove 0.4s linear infinite;
+}
+
+@keyframes rainMove {
+  from { background-position-y: 0; }
+  to { background-position-y: 100%; }
+}
+
+/* SNOW */
+.sky-snow {
+  z-index: 4;
+  background-size: cover;
+  opacity: 0;
+  animation: snowDrift 12s linear infinite;
+}
+
+@keyframes snowDrift {
+  from { background-position: 0 0; }
+  to { background-position: -20px 100%; }
+}
+
+/* LIGHTNING */
+.sky-lightning {
+  z-index: 5;
+  background-size: cover;
+  opacity: 0;
+}
+
+/* SUN HALO */
+.sky-sun {
+  z-index: 6;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: top right;
+  opacity: 0;
+}
+
+/* STARS */
+.sky-stars {
+  z-index: 1;
+  background-size: cover;
+  opacity: 0;
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+.container {
+  position: relative;
+  z-index: 10;
+  width: 420px;
+  padding: 28px;
+  backdrop-filter: blur(30px);
+  background: rgba(8, 10, 18, 0.55);
+  border-radius: 24px;
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+header input {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(245, 247, 252, 0.96);
+  color: #1f2933;
+}
+
+.weather-card {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.weather-card .temp {
+  font-size: 72px;
+  font-weight: 700;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.detail-box {
+  background: rgba(255, 255, 255, 0.10);
+  padding: 12px;
+  border-radius: 14px;
+  text-align: center;
+}
