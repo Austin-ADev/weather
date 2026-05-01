@@ -4,8 +4,13 @@ body {
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
   background: #000;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   color: #fff;
+}
+
+html, body {
+  height: 100%;
 }
 
 #sky {
@@ -27,21 +32,66 @@ body {
   background: rgba(10, 10, 15, 0.82);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.8);
   color: #f8f9ff;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
-/* Search */
-.weather-box input {
+/* SEARCH BAR */
+.search-wrapper {
+  position: relative;
   width: 100%;
-  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.search-wrapper input {
+  width: 100%;
+  padding: 14px 90px 14px 14px;
   border-radius: 14px;
   border: none;
   outline: none;
-  margin-bottom: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.10);
   color: #f8f9ff;
   font-size: 16px;
+  backdrop-filter: blur(20px);
 }
 
+.search-icon-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255,255,255,0.12);
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.search-icon-btn:hover {
+  background: rgba(255,255,255,0.18);
+}
+
+#detectLocation {
+  right: 46px;
+}
+
+#voiceSearch {
+  right: 8px;
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  fill: #fff;
+  opacity: 0.85;
+}
+
+/* Search results */
 #searchResults {
   width: 100%;
   background: rgba(255,255,255,0.08);
@@ -61,25 +111,6 @@ body {
 
 .search-item:hover {
   background: rgba(255,255,255,0.14);
-}
-
-/* Buttons */
-#detectLocation,
-#voiceSearch {
-  width: 100%;
-  padding: 12px;
-  border-radius: 12px;
-  border: none;
-  margin-bottom: 18px;
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-#detectLocation:hover,
-#voiceSearch:hover {
-  background: rgba(255, 255, 255, 0.18);
 }
 
 /* Header */
@@ -156,9 +187,12 @@ body {
 
 /* Forecast titles */
 .forecast-title {
-  margin-top: 10px;
+  margin-top: 20px;
+  margin-bottom: 6px;
   font-size: 16px;
   opacity: 0.9;
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+  padding-bottom: 4px;
 }
 
 /* 24-hour forecast */
@@ -170,11 +204,12 @@ body {
 }
 
 .forecast-hour {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 0;
+  display: grid;
+  grid-template-columns: 70px 1fr 1fr;
+  padding: 6px 0;
   border-bottom: 1px solid rgba(255,255,255,0.08);
-  font-size: 13px;
+  font-size: 14px;
+  align-items: center;
 }
 
 /* 7-day forecast */
@@ -186,11 +221,12 @@ body {
 }
 
 .daily-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 0;
+  display: grid;
+  grid-template-columns: 70px 1fr 1fr;
+  padding: 6px 0;
   border-bottom: 1px solid rgba(255,255,255,0.08);
-  font-size: 13px;
+  font-size: 14px;
+  align-items: center;
 }
 
 /* Radar */
@@ -206,170 +242,4 @@ body {
   width: 100%;
   height: 100%;
   border: none;
-}
-
-/* Animated icons */
-.weather-icon {
-  width: 64px;
-  height: 64px;
-  position: relative;
-}
-
-.icon-sun {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fff9c4, #ffeb3b);
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  box-shadow: 0 0 16px rgba(255, 235, 59, 0.8);
-  animation: sunPulse 3s infinite ease-in-out;
-}
-
-.icon-cloud {
-  position: absolute;
-  bottom: 10px;
-  left: 6px;
-  width: 52px;
-  height: 28px;
-  background: #f5f5f5;
-  border-radius: 20px;
-  box-shadow: 0 0 10px rgba(255,255,255,0.4);
-}
-
-.icon-cloud::before,
-.icon-cloud::after {
-  content: "";
-  position: absolute;
-  background: #f5f5f5;
-  border-radius: 50%;
-}
-
-.icon-cloud::before {
-  width: 24px;
-  height: 24px;
-  left: 4px;
-  top: -12px;
-}
-
-.icon-cloud::after {
-  width: 28px;
-  height: 28px;
-  right: 4px;
-  top: -16px;
-}
-
-.icon-rain-drop {
-  position: absolute;
-  width: 4px;
-  height: 10px;
-  background: #90caf9;
-  border-radius: 50%;
-  bottom: 0;
-  left: 18px;
-  animation: rainFall 0.8s infinite linear;
-}
-
-.icon-rain-drop:nth-child(2) {
-  left: 28px;
-  animation-delay: 0.2s;
-}
-
-.icon-rain-drop:nth-child(3) {
-  left: 38px;
-  animation-delay: 0.4s;
-}
-
-.icon-snow-flake {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 2px solid #e3f2fd;
-  bottom: 0;
-  left: 20px;
-  animation: snowDrift 1.4s infinite ease-in-out;
-}
-
-.icon-snow-flake:nth-child(2) {
-  left: 32px;
-  animation-delay: 0.3s;
-}
-
-.icon-storm-bolt {
-  position: absolute;
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 14px solid #ffeb3b;
-  bottom: 0;
-  left: 26px;
-  filter: drop-shadow(0 0 6px rgba(255, 235, 59, 0.9));
-  animation: boltFlash 1.2s infinite ease-in-out;
-}
-
-/* Animations */
-@keyframes sunPulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.08); opacity: 0.9; }
-}
-
-@keyframes rainFall {
-  0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(10px); opacity: 0; }
-}
-
-@keyframes snowDrift {
-  0% { transform: translate(0, 0); opacity: 1; }
-  50% { transform: translate(-2px, 4px); opacity: 0.8; }
-  100% { transform: translate(2px, 8px); opacity: 0.6; }
-}
-
-@keyframes boltFlash {
-  0%, 100% { opacity: 0.3; }
-  40% { opacity: 1; }
-}
-.search-wrapper {
-  position: relative;
-  width: 100%;
-  margin-bottom: 12px;
-}
-
-.search-wrapper input {
-  width: 100%;
-  padding: 14px 90px 14px 14px; /* space for icons */
-  border-radius: 14px;
-  border: none;
-  outline: none;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f8f9ff;
-  font-size: 16px;
-}
-.search-icon-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 18px;
-  cursor: pointer;
-  opacity: 0.75;
-  transition: opacity 0.15s;
-}
-
-.search-icon-btn:hover {
-  opacity: 1;
-}
-
-/* Location icon on the right */
-#detectLocation {
-  right: 42px;
-}
-
-/* Voice icon on the far right */
-#voiceSearch {
-  right: 10px;
 }
