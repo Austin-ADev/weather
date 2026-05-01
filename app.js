@@ -2,258 +2,165 @@
 // LOG HELPERS
 // =====================================================
 function log(...a){ console.log("%c[WeatherShader]","color:#4af",...a) }
-function warn(...a){ console.warn("%c[WeatherShader WARN]","color:#fa0",...a) }
 function err(...a){ console.error("%c[WeatherShader ERROR]","color:#f44",...a) }
 
 // =====================================================
 // FETCH TEXT FILE
 // =====================================================
 async function loadText(url){
-  log("Fetching:", url)
-  const r = await fetch(url)
-  if(!r.ok){
-    err("Failed to fetch:", url, "Status:", r.status)
-    throw new Error("Fetch failed: " + url)
-  }
-  return r.text()
+  const r = await fetch(url);
+  if(!r.ok) throw new Error("Failed to fetch " + url);
+  return r.text();
 }
 
 // =====================================================
-// LOAD + COMPILE + LINK SHADER PROGRAM
+// LOAD SHADER PROGRAM
 // =====================================================
 async function loadShaderProgram(gl, vertURL, fragURL){
-  try{
-    const vertSrc = await loadText(vertURL)
-    const fragSrc = await loadText(fragURL)
+  const vertSrc = await loadText(vertURL);
+  const fragSrc = await loadText(fragURL);
 
-    log("VERTEX SHADER SOURCE (first 200 chars):", vertSrc.slice(0,200))
-    log("FRAGMENT SHADER SOURCE (first 200 chars):", fragSrc.slice(0,200))
-
-    function compile(type, src, label){
-      const s = gl.createShader(type)
-      gl.shaderSource(s, src)
-      gl.compileShader(s)
-
-      if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
-        err("Compile fail ("+label+"):", gl.getShaderInfoLog(s))
-        return null
-      }
-
-      log(label, "compiled OK")
-      return s
+  function compile(type, src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+      err(gl.getShaderInfoLog(s));
+      return null;
     }
-
-    const vs = compile(gl.VERTEX_SHADER, vertSrc, vertURL)
-    const fs = compile(gl.FRAGMENT_SHADER, fragSrc, fragURL)
-    if(!vs || !fs) return null
-
-    const prog = gl.createProgram()
-    gl.attachShader(prog, vs)
-    gl.attachShader(prog, fs)
-    gl.linkProgram(prog)
-
-    if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
-      err("Link fail:", gl.getProgramInfoLog(prog))
-      return null
-    }
-
-    log("Linked:", vertURL, "+", fragURL)
-
-    // =====================================================
-    // DEBUG: LIST ACTIVE UNIFORMS
-    // =====================================================
-    const numUniforms = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS)
-    log("Active uniforms count:", numUniforms)
-
-    for(let i=0;i<numUniforms;i++){
-      const info = gl.getActiveUniform(prog, i)
-      log("Active uniform:", info.name, "type:", info.type, "size:", info.size)
-    }
-
-    // =====================================================
-    // DEBUG: LIST ACTIVE ATTRIBUTES
-    // =====================================================
-    const numAttribs = gl.getProgramParameter(prog, gl.ACTIVE_ATTRIBUTES)
-    log("Active attributes count:", numAttribs)
-
-    for(let i=0;i<numAttribs;i++){
-      const info = gl.getActiveAttrib(prog, i)
-      log("Active attribute:", info.name, "type:", info.type, "size:", info.size)
-    }
-
-    return prog
-
-  }catch(e){
-    err("Shader load error:", e)
-    return null
+    return s;
   }
+
+  const vs = compile(gl.VERTEX_SHADER, vertSrc);
+  const fs = compile(gl.FRAGMENT_SHADER, fragSrc);
+  if(!vs || !fs) return null;
+
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs);
+  gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
+    err(gl.getProgramInfoLog(prog));
+    return null;
+  }
+
+  return prog;
 }
 
 // =====================================================
 // MAIN INIT
 // =====================================================
 async function init(){
-  const canvas = document.getElementById("sky")
-  const gl = canvas.getContext("webgl")
-  if(!gl){ err("WebGL unsupported"); return }
+  const canvas = document.getElementById("sky");
+  const gl = canvas.getContext("webgl");
 
-  // ---------------------------
-  // Resize
-  // ---------------------------
   function resize(){
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = innerWidth * dpr
-    canvas.height = innerHeight * dpr
-    canvas.style.width = innerWidth + "px"
-    canvas.style.height = innerHeight + "px"
-    gl.viewport(0, 0, canvas.width, canvas.height)
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = innerWidth * dpr;
+    canvas.height = innerHeight * dpr;
+    canvas.style.width = innerWidth + "px";
+    canvas.style.height = innerHeight + "px";
+    gl.viewport(0,0,canvas.width,canvas.height);
   }
-  resize()
-  addEventListener("resize", resize)
+  resize();
+  addEventListener("resize", resize);
 
-  // ---------------------------
-  // GPU TIER DETECTION
-  // ---------------------------
-  let tier = 1
-  const ext = gl.getExtension("WEBGL_debug_renderer_info")
-  if(ext){
-    const gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).toLowerCase()
-    log("GPU:", gpu)
+  // GPU tier
+  let tier = 1;
 
-    if(gpu.includes("rtx") || gpu.includes("radeon") || gpu.includes("apple")) tier = 2
-    if(gpu.includes("intel") || gpu.includes("uhd") || gpu.includes("hd")) tier = 0
-  }
-  log("Selected tier:", tier)
-
-  // ---------------------------
-  // SHADER SETS (with cache‑bust)
-  // ---------------------------
   const shaderSets = [
     { tier:2, vert:"shaders/ultra.vert?v=999", frag:"shaders/ultra.frag?v=999" },
     { tier:1, vert:"shaders/high.vert?v=999",  frag:"shaders/high.frag?v=999" },
     { tier:0, vert:"shaders/perf.vert?v=999",  frag:"shaders/perf.frag?v=999" }
-  ]
+  ];
 
-  // ---------------------------
-  // TRY SHADERS IN ORDER
-  // ---------------------------
-  let program = null
-  for(const s of shaderSets){
-    if(s.tier > tier){
-      log("Skipping shader (too high tier):", s.vert)
-      continue
-    }
+  let program = null;
 
-    log("Trying shader:", s.vert, "+", s.frag)
-    program = await loadShaderProgram(gl, s.vert, s.frag)
-
-    if(program){
-      log("Shader accepted:", s.vert)
-      break
-    } else {
-      warn("Shader rejected:", s.vert)
+  async function loadTier(t){
+    for(const s of shaderSets){
+      if(s.tier > t) continue;
+      const p = await loadShaderProgram(gl, s.vert, s.frag);
+      if(p){
+        program = p;
+        gl.useProgram(program);
+        return;
+      }
     }
   }
 
-  if(!program){
-    err("No shader could be loaded — nothing to render")
-    return
-  }
+  await loadTier(tier);
 
-  gl.useProgram(program)
+  // Console tier switcher
+  window.setTier = async function(newTier){
+    tier = newTier;
+    await loadTier(tier);
+  };
 
-  // ---------------------------
-  // FULLSCREEN QUAD
-  // ---------------------------
-  const quad = gl.createBuffer()
-  gl.bindBuffer(gl.ARRAY_BUFFER, quad)
+  // Fullscreen quad
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
     -1,-1, 1,-1, -1,1,
     -1,1, 1,-1, 1,1
-  ]), gl.STATIC_DRAW)
+  ]), gl.STATIC_DRAW);
 
-  const aPos = gl.getAttribLocation(program, "aPos")
-  log("aPos location:", aPos)
-  gl.enableVertexAttribArray(aPos)
-  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
+  const aPos = gl.getAttribLocation(program, "aPos");
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-  // ---------------------------
-  // UNIFORMS
-  // ---------------------------
-  const uTime = gl.getUniformLocation(program, "uTime")
-  const uRes  = gl.getUniformLocation(program, "uResolution")
-  const uMode = gl.getUniformLocation(program, "uMode")
-  const uQual = gl.getUniformLocation(program, "uQuality")
+  const uTime = gl.getUniformLocation(program, "uTime");
+  const uRes  = gl.getUniformLocation(program, "uResolution");
+  const uMode = gl.getUniformLocation(program, "uMode");
+  const uQual = gl.getUniformLocation(program, "uQuality");
 
-  log("Uniform locations:", {uTime, uRes, uMode, uQual})
+  gl.uniform1i(uQual, tier);
 
-  if(!uTime || !uRes || !uMode || !uQual){
-    err("Uniforms missing — shader did not use them")
-    return
-  }
-
-  gl.uniform1i(uQual, tier)
-
-  // ---------------------------
-  // RENDER LOOP
-  // ---------------------------
-  let mode = 0
-  let start = performance.now()
+  let mode = 0;
+  let start = performance.now();
 
   function render(){
-    requestAnimationFrame(render)
-    let t = (performance.now() - start) / 1000
+    requestAnimationFrame(render);
+    let t = (performance.now() - start) / 1000;
 
-    gl.uniform1f(uTime, t)
-    gl.uniform2f(uRes, canvas.width, canvas.height)
-    gl.uniform1i(uMode, mode)
+    gl.uniform1f(uTime, t);
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1i(uMode, mode);
 
-    gl.drawArrays(gl.TRIANGLES, 0, 6)
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
-  render()
+  render();
 
-  // ---------------------------
   // WEATHER API
-  // ---------------------------
   async function fetchWeather(city){
-    try{
-      log("Fetching weather for:", city)
+    const geo = await fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + city).then(r=>r.json());
+    if(!geo.results) return;
 
-      const geo = await fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + city).then(r=>r.json())
-      if(!geo.results){ err("City not found"); return }
+    const { latitude, longitude, name, country } = geo.results[0];
 
-      const { latitude, longitude, name, country } = geo.results[0]
+    const w = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&timezone=auto`
+    ).then(r=>r.json());
 
-      const w = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&timezone=auto`
-      ).then(r=>r.json())
+    const c = w.current_weather;
 
-      const c = w.current_weather
-      log("Weather data:", c)
+    mode =
+      (c.is_day === 0) ? 5 :
+      [95,96,99].includes(c.weathercode) ? 3 :
+      [51,53,55,61,63,65,80,81,82].includes(c.weathercode) ? 2 :
+      [71,73,75,77,85,86].includes(c.weathercode) ? 4 :
+      [2,3].includes(c.weathercode) ? 1 : 0;
 
-      mode =
-        (c.is_day === 0) ? 5 :
-        [95,96,99].includes(c.weathercode) ? 3 :
-        [51,53,55,61,63,65,80,81,82].includes(c.weathercode) ? 2 :
-        [71,73,75,77,85,86].includes(c.weathercode) ? 4 :
-        [2,3].includes(c.weathercode) ? 1 : 0
-
-      log("Mapped weather mode:", mode)
-
-      document.querySelector(".city-name").textContent = `${name}, ${country}`
-      document.querySelector(".temp").textContent = `${Math.round(c.temperature)}°F`
-      document.querySelector(".condition").textContent = c.weathercode
-
-    }catch(e){
-      err("Weather error:", e)
-    }
+    document.querySelector(".city-name").textContent = `${name}, ${country}`;
+    document.querySelector(".temp").textContent = `${Math.round(c.temperature)}°F`;
+    document.querySelector(".condition").textContent = c.weathercode;
   }
 
   document.getElementById("citySearch").addEventListener("keydown", e=>{
-    if(e.key === "Enter") fetchWeather(e.target.value)
-  })
+    if(e.key === "Enter") fetchWeather(e.target.value);
+  });
 
-  fetchWeather("New York")
+  fetchWeather("New York");
 }
 
-init()
+init();
