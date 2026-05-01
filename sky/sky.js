@@ -58,7 +58,7 @@ export const Sky = {
     this.shaderSets = shaderSets;
     this.tier = initialTier;
 
-    // fullscreen quad (one buffer for all tiers)
+    // fullscreen quad
     this._quadBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._quadBuffer);
     gl.bufferData(
@@ -75,19 +75,19 @@ export const Sky = {
   },
 
   async _loadTierProgram(tier) {
-    // cache key: tier
     if (this._programCache.has(tier)) {
       return this._programCache.get(tier);
     }
 
     const gl = this.gl;
-    // pick best shader whose s.tier <= requested tier
     let chosen = null;
+
     for (const s of this.shaderSets) {
       if (s.tier <= tier) {
         if (!chosen || s.tier > chosen.tier) chosen = s;
       }
     }
+
     if (!chosen) throw new Error("No shader for tier " + tier);
 
     const prog = await loadShaderProgram(gl, chosen.vert, chosen.frag);
@@ -143,29 +143,30 @@ export const Sky = {
 
     const t = (performance.now() - this.timeStart) / 1000;
     const state = WeatherEngine.update(t);
+    if (!state) return;
 
-    // resolution: keep stable, let CSS handle layout
     const dpr = window.devicePixelRatio || 1;
     const w = gl.canvas.clientWidth * dpr;
     const h = gl.canvas.clientHeight * dpr;
+
     if (gl.canvas.width !== w || gl.canvas.height !== h) {
       gl.canvas.width = w;
       gl.canvas.height = h;
       gl.viewport(0, 0, w, h);
     }
 
-    if (this.uniforms.uTime)        gl.uniform1f(this.uniforms.uTime, t);
-    if (this.uniforms.uResolution)  gl.uniform2f(this.uniforms.uResolution, w, h);
-    if (this.uniforms.uMode)        gl.uniform1i(this.uniforms.uMode, state.mode);
-    if (this.uniforms.uSeed)        gl.uniform1f(this.uniforms.uSeed, state.seed);
-    if (this.uniforms.uCloudLow)    gl.uniform1f(this.uniforms.uCloudLow, state.cloudLow);
-    if (this.uniforms.uCloudHigh)   gl.uniform1f(this.uniforms.uCloudHigh, state.cloudHigh);
-    if (this.uniforms.uSunIntensity)gl.uniform1f(this.uniforms.uSunIntensity, state.sunIntensity);
-    if (this.uniforms.uLightning)   gl.uniform1f(this.uniforms.uLightning, state.lightning);
-    if (this.uniforms.uCloudSpeed)  gl.uniform1f(this.uniforms.uCloudSpeed, state.cloudSpeed);
-    if (this.uniforms.uFogDensity)  gl.uniform1f(this.uniforms.uFogDensity, state.fogDensity);
-    if (this.uniforms.uWind)        gl.uniform2f(this.uniforms.uWind, state.windX, state.windY);
-    if (this.uniforms.uDayPhase)    gl.uniform1f(this.uniforms.uDayPhase, state.dayPhase);
+    gl.uniform1f(this.uniforms.uTime, t);
+    gl.uniform2f(this.uniforms.uResolution, w, h);
+    gl.uniform1i(this.uniforms.uMode, state.mode);
+    gl.uniform1f(this.uniforms.uSeed, state.seed);
+    gl.uniform1f(this.uniforms.uCloudLow, state.cloudLow);
+    gl.uniform1f(this.uniforms.uCloudHigh, state.cloudHigh);
+    gl.uniform1f(this.uniforms.uSunIntensity, state.sunIntensity);
+    gl.uniform1f(this.uniforms.uLightning, state.lightning);
+    gl.uniform1f(this.uniforms.uCloudSpeed, state.cloudSpeed);
+    gl.uniform1f(this.uniforms.uFogDensity, state.fogDensity);
+    gl.uniform2f(this.uniforms.uWind, state.windX, state.windY);
+    gl.uniform1f(this.uniforms.uDayPhase, state.dayPhase);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
