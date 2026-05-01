@@ -2,6 +2,17 @@
 import { Sky } from "./sky/sky.js";
 import { WeatherEngine } from "./sky/weatherEngine.js";
 
+// Debug helper
+const log = {
+  app: (...msg) => console.log("%c[APP]", "color:#4af", ...msg),
+  sky: (...msg) => console.log("%c[SKY]", "color:#6f6", ...msg),
+  weather: (...msg) => console.log("%c[WEATHER]", "color:#ff6", ...msg),
+  fetch: (...msg) => console.log("%c[FETCH]", "color:#f66", ...msg),
+  search: (...msg) => console.log("%c[SEARCH]", "color:#9cf", ...msg),
+  radar: (...msg) => console.log("%c[RADAR]", "color:#fc9", ...msg),
+  fade: (...msg) => console.log("%c[FADE]", "color:#ccc", ...msg)
+};
+
 // DOM references
 const skyCanvas = document.getElementById("sky");
 const weatherContent = document.getElementById("weatherContent");
@@ -25,34 +36,46 @@ const searchResults = document.getElementById("searchResults");
 const detectLocationBtn = document.getElementById("detectLocation");
 
 // WebGL
+log.app("Initializing WebGL…");
 const gl = skyCanvas.getContext("webgl", { antialias: true });
 
-// Resize canvas to match CSS size
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const rect = skyCanvas.getBoundingClientRect();
   skyCanvas.width = rect.width * dpr;
   skyCanvas.height = rect.height * dpr;
   gl.viewport(0, 0, skyCanvas.width, skyCanvas.height);
+
+  log.sky("Canvas resized:", {
+    cssWidth: rect.width,
+    cssHeight: rect.height,
+    pixelWidth: skyCanvas.width,
+    pixelHeight: skyCanvas.height,
+    dpr
+  });
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 // Shader tiers
 const shaderSets = [
-  { tier: 1, vert: "shaders/vert.glsl", frag: "sky/perf.frag" },
-  { tier: 2, vert: "shaders/vert.glsl", frag: "sky/high.frag" },
-  { tier: 3, vert: "shaders/vert.glsl", frag: "sky/ultraB.frag" },
-  { tier: 4, vert: "shaders/vert.glsl", frag: "sky/ultraC.frag" }
+  { tier: 1, vert: "shaders/vert.glsl", frag: "shaders/perf.frag" },
+  { tier: 2, vert: "shaders/vert.glsl", frag: "shaders/high.frag" },
+  { tier: 3, vert: "shaders/vert.glsl", frag: "shaders/ultraB.frag" },
+  { tier: 4, vert: "shaders/vert.glsl", frag: "shaders/ultraC.frag" }
 ];
+
+log.sky("Shader sets:", shaderSets);
 
 // Fade helpers
 function fadeOutWeather() {
+  log.fade("Fading OUT weather + sky…");
   weatherContent.classList.add("fade-out");
   skyCanvas.classList.add("fade-out");
 }
 
 function fadeInWeather() {
+  log.fade("Fading IN weather + sky…");
   weatherContent.classList.remove("fade-out");
   skyCanvas.classList.remove("fade-out");
 }
@@ -61,6 +84,7 @@ function fadeInWeather() {
 function setRadar(lat, lon) {
   const url = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&level=surface&overlay=radar`;
   radarFrame.src = url;
+  log.radar("Radar updated:", url);
 }
 
 // Time formatting
@@ -91,6 +115,7 @@ function moonPhaseLabel(phase) {
 
 // Build hourly forecast
 function buildHourly(hourly, timezone) {
+  log.weather("Building hourly forecast…");
   forecastEl.innerHTML = "";
   const hours = hourly.time.slice(0, 24);
 
@@ -114,6 +139,7 @@ function buildHourly(hourly, timezone) {
 
 // Build daily forecast
 function buildDaily(daily) {
+  log.weather("Building daily forecast…");
   dailyForecastEl.innerHTML = "";
   const days = daily.time;
 
@@ -144,9 +170,18 @@ function buildDaily(daily) {
 // API fetch
 async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase&timezone=auto`;
+
+  log.fetch("Fetching weather:", url);
+
   const res = await fetch(url);
-  if (!res.ok) throw new Error("Weather fetch failed");
-  return res.json();
+  if (!res.ok) {
+    log.fetch("Weather fetch FAILED:", res.status);
+    throw new Error("Weather fetch failed");
+  }
+
+  const json = await res.json();
+  log.fetch("Weather fetch SUCCESS:", json);
+  return json;
 }
 
 // Geocoding
@@ -154,9 +189,15 @@ async function geocodeCity(name) {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
     name
   )}&count=5&language=en&format=json`;
+
+  log.search("Geocoding:", url);
+
   const res = await fetch(url);
   if (!res.ok) throw new Error("Geocode failed");
-  return res.json();
+
+  const json = await res.json();
+  log.search("Geocode results:", json);
+  return json;
 }
 
 // Search results
@@ -167,6 +208,8 @@ function showSearchResults(results) {
     return;
   }
 
+  log.search("Showing search results:", results.results.length);
+
   results.results.forEach(r => {
     const item = document.createElement("div");
     item.className = "search-item";
@@ -175,6 +218,7 @@ function showSearchResults(results) {
     item.textContent = label;
 
     item.addEventListener("click", () => {
+      log.search("Selected:", label);
       searchResults.style.display = "none";
       searchInput.value = label;
       setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
@@ -188,6 +232,8 @@ function showSearchResults(results) {
 
 // Set location from coordinates
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
+  log.app("Setting location:", label, lat, lon);
+
   fadeOutWeather();
 
   setTimeout(async () => {
@@ -199,6 +245,8 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       const timezone = data.timezone || timezoneOverride || "UTC";
 
       const code = current.weather_code;
+      log.weather("Applying weather code:", code, WeatherEngine.describe(code));
+
       WeatherEngine.setFromAPI(label, code);
 
       cityNameEl.textContent = label;
@@ -215,8 +263,9 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       buildHourly(hourly, timezone);
       buildDaily(daily);
       setRadar(lat, lon);
+
     } catch (e) {
-      console.error(e);
+      log.app("ERROR setting location:", e);
     } finally {
       fadeInWeather();
     }
@@ -225,16 +274,23 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
 
 // Set location by name
 async function setLocationByName(name) {
+  log.search("Searching for:", name);
+
   try {
     const geo = await geocodeCity(name);
-    if (!geo.results || geo.results.length === 0) return;
+    if (!geo.results || geo.results.length === 0) {
+      log.search("No results for:", name);
+      return;
+    }
 
     const r = geo.results[0];
     const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
 
+    log.search("Resolved to:", label);
+
     await setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
   } catch (e) {
-    console.error(e);
+    log.search("Search error:", e);
   }
 }
 
@@ -244,6 +300,7 @@ function initSearch() {
 
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim();
+    log.search("Input:", q);
 
     if (searchTimeout) clearTimeout(searchTimeout);
 
@@ -257,7 +314,7 @@ function initSearch() {
         const geo = await geocodeCity(q);
         showSearchResults(geo);
       } catch (e) {
-        console.error(e);
+        log.search("Error:", e);
       }
     }, 250);
   });
@@ -270,6 +327,7 @@ function initHourlyToggle() {
   hourlyToggle.addEventListener("click", () => {
     const isOpen = forecastEl.classList.toggle("open");
     hourlyToggle.classList.toggle("open", isOpen);
+    log.app("Toggled hourly forecast:", isOpen);
   });
 }
 
@@ -278,15 +336,21 @@ function initDetectLocation() {
   if (!detectLocationBtn) return;
 
   detectLocationBtn.addEventListener("click", () => {
-    if (!navigator.geolocation) return;
+    log.app("Detecting location…");
+
+    if (!navigator.geolocation) {
+      log.app("Geolocation not supported");
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude, longitude } = pos.coords;
+        log.app("Location detected:", latitude, longitude);
         setLocationFromCoords("My Location", latitude, longitude);
       },
       err => {
-        console.warn("Geolocation error", err);
+        log.app("Geolocation error:", err);
       }
     );
   });
@@ -294,6 +358,7 @@ function initDetectLocation() {
 
 // MAIN
 (async () => {
+  log.app("Initializing SkyEngine…");
   await Sky.init(gl, shaderSets);
 
   initSearch();
@@ -301,9 +366,22 @@ function initDetectLocation() {
   initDetectLocation();
 
   // Default location
+  log.app("Loading default location: Indianapolis");
   setLocationByName("Indianapolis");
 
+  let frameCount = 0;
+  let lastTime = performance.now();
+
   function frame() {
+    frameCount++;
+
+    const now = performance.now();
+    if (now - lastTime >= 1000) {
+      log.sky("FPS:", frameCount);
+      frameCount = 0;
+      lastTime = now;
+    }
+
     Sky.update();
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(frame);
