@@ -21,37 +21,33 @@ html, body {
 
 /* Weather box */
 .weather-box {
-  position: absolute;
-  top: 6%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 420px;
-  padding: 24px;
-  border-radius: 24px;
+  position: relative;
+  width: 480px;
+  margin: 60px auto;
+  padding: 32px;
+  border-radius: 28px;
   backdrop-filter: blur(25px) saturate(180%);
   background: rgba(10, 10, 15, 0.82);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.8);
   color: #f8f9ff;
-  max-height: 90vh;
-  overflow-y: auto;
 }
 
 /* SEARCH BAR */
 .search-wrapper {
   position: relative;
   width: 100%;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .search-wrapper input {
   width: 100%;
-  padding: 14px 90px 14px 14px;
-  border-radius: 14px;
+  padding: 16px 100px 16px 16px;
+  border-radius: 16px;
   border: none;
   outline: none;
   background: rgba(255, 255, 255, 0.10);
   color: #f8f9ff;
-  font-size: 16px;
+  font-size: 17px;
   backdrop-filter: blur(20px);
 }
 
@@ -61,8 +57,8 @@ html, body {
   transform: translateY(-50%);
   background: rgba(255,255,255,0.12);
   border: none;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -77,16 +73,16 @@ html, body {
 }
 
 #detectLocation {
-  right: 46px;
+  right: 52px;
 }
 
 #voiceSearch {
-  right: 8px;
+  right: 10px;
 }
 
 .icon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   fill: #fff;
   opacity: 0.85;
 }
@@ -96,17 +92,17 @@ html, body {
   width: 100%;
   background: rgba(255,255,255,0.08);
   backdrop-filter: blur(20px);
-  border-radius: 12px;
-  margin-bottom: 12px;
-  max-height: 200px;
-  overflow-y: auto;
+  border-radius: 16px;
+  margin-bottom: 16px;
   display: none;
+  padding: 6px 0;
 }
 
 .search-item {
-  padding: 10px 14px;
+  padding: 12px 18px;
   cursor: pointer;
   border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 15px;
 }
 
 .search-item:hover {
@@ -118,32 +114,31 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 18px;
 }
 
 .city-name {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 600;
-  margin-bottom: 4px;
 }
 
 .localtime {
-  font-size: 14px;
+  font-size: 15px;
   opacity: 0.8;
-  margin-bottom: 8px;
 }
 
 /* Moon phase */
 .moon-phase {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 14px;
   opacity: 0.9;
 }
 
 .moon-icon {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, #fff, #ddd 60%, #aaa 100%);
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
@@ -151,91 +146,83 @@ html, body {
 
 /* Current weather */
 .current-row {
-  margin-top: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 20px;
 }
 
 .icon-and-temp {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
 }
 
 .temp {
-  font-size: 56px;
+  font-size: 64px;
   font-weight: 700;
-  margin-bottom: 2px;
 }
 
 .condition {
-  font-size: 18px;
+  font-size: 20px;
   opacity: 0.9;
 }
 
 /* Details */
 .details {
-  font-size: 15px;
+  font-size: 16px;
   opacity: 0.9;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .detail-row {
   display: flex;
   justify-content: space-between;
-  margin: 4px 0;
+  margin: 6px 0;
 }
 
 /* Forecast titles */
 .forecast-title {
-  margin-top: 20px;
-  margin-bottom: 6px;
-  font-size: 16px;
+  margin-top: 28px;
+  margin-bottom: 10px;
+  font-size: 18px;
   opacity: 0.9;
   border-bottom: 1px solid rgba(255,255,255,0.15);
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 /* 24-hour forecast */
 #forecast {
-  margin-top: 8px;
-  max-height: 160px;
-  overflow-y: auto;
-  padding-right: 6px;
+  margin-top: 10px;
 }
 
 .forecast-hour {
   display: grid;
-  grid-template-columns: 70px 1fr 1fr;
-  padding: 6px 0;
+  grid-template-columns: 80px 1fr 1fr;
+  padding: 8px 0;
   border-bottom: 1px solid rgba(255,255,255,0.08);
-  font-size: 14px;
+  font-size: 15px;
   align-items: center;
 }
 
 /* 7-day forecast */
 #dailyForecast {
-  margin-top: 8px;
-  max-height: 180px;
-  overflow-y: auto;
-  padding-right: 6px;
+  margin-top: 10px;
 }
 
 .daily-row {
   display: grid;
-  grid-template-columns: 70px 1fr 1fr;
-  padding: 6px 0;
+  grid-template-columns: 80px 1fr 1fr;
+  padding: 8px 0;
   border-bottom: 1px solid rgba(255,255,255,0.08);
-  font-size: 14px;
+  font-size: 15px;
   align-items: center;
 }
 
 /* Radar */
 #radarContainer {
-  margin-top: 8px;
-  border-radius: 12px;
+  margin-top: 16px;
+  border-radius: 20px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.12);
-  height: 180px;
+  height: 300px; /* Bigger radar */
 }
 
 #radarFrame {
