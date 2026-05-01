@@ -149,6 +149,62 @@ float lightningFlash(float t, float intensity) {
 }
 
 // --------------------------------------------------------
+// Time-of-day & weather tints for clouds (PBR-ish)
+// --------------------------------------------------------
+
+vec3 timeOfDayTint(float dayPhase, int mode) {
+    float sunrise = smoothstep(0.0, 0.15, dayPhase);
+    float sunset  = smoothstep(1.0, 0.85, dayPhase);
+    float night   = step(dayPhase, 0.05) + step(0.95, dayPhase);
+
+    vec3 sunriseTint = vec3(1.25, 0.7, 0.6);
+    vec3 sunsetTint  = vec3(1.3, 0.75, 0.65);
+    vec3 nightTint   = vec3(0.6, 0.7, 1.0);
+    vec3 dayTint     = vec3(1.0);
+
+    vec3 tint = dayTint;
+    tint = mix(tint, sunriseTint, sunrise);
+    tint = mix(tint, sunsetTint,  sunset);
+    tint = mix(tint, nightTint,   clamp(night, 0.0, 1.0));
+
+    if (mode != 5) {
+        tint = mix(tint, dayTint, 0.3);
+    }
+
+    return tint;
+}
+
+vec3 weatherCloudBaseColor(int mode) {
+    if (mode == 2) { // rain
+        return vec3(0.78, 0.8, 0.83);
+    }
+    if (mode == 3) { // storm
+        return vec3(0.45, 0.48, 0.52);
+    }
+    if (mode == 4) { // snow
+        return vec3(0.95, 0.97, 1.0);
+    }
+    if (mode == 5) { // night
+        return vec3(0.6, 0.65, 0.7);
+    }
+    if (mode == 1) { // partly / cloudy
+        return vec3(0.92, 0.95, 0.98);
+    }
+    return vec3(1.0);
+}
+
+float cloudLighting(vec3 p, float dayPhase, float density) {
+    float angle = dayPhase * 6.2831853;
+    vec3 sunDir = normalize(vec3(cos(angle), sin(angle), 0.4));
+
+    vec3 n = normalize(vec3(p.x, p.y + 0.7, 0.6));
+    float ndotl = clamp(dot(n, sunDir), 0.0, 1.0);
+
+    float scatter = pow(ndotl, mix(1.0, 4.0, density));
+    return scatter;
+}
+
+// --------------------------------------------------------
 // Main
 // --------------------------------------------------------
 
@@ -170,50 +226,57 @@ void main() {
     vec3 rd = normalize(vec3(uv, 1.6));
 
     // wind in 3D
-    vec3 wind3 = vec3(uWind.x, 0.0, uWind.y) * 0.7;
+    vec3 wind3 = vec3(uWind.x, 0.0, uWind.y) * (0.7 + uCloudSpeed * 0.5);
 
     float maxDist  = 8.0;
-    int   steps    = 32;
+    int   steps    = 28;          // still high, but a bit cheaper than 32
     float stepSize = maxDist / float(steps);
 
-    float density    = 0.0;
-    float lightAccum = 0.0;
-    vec3  p          = ro;
+    float density = 0.0;
+    vec3  p       = ro;
 
-    for (int i = 0; i < 32; i++) {
+    vec3 baseCloudColor = weatherCloudBaseColor(uMode);
+    vec3 todTint        = timeOfDayTint(uDayPhase, uMode);
+
+    for (int i = 0; i < 28; i++) {
         float d = float(i) * stepSize;
         p = ro + rd * d;
 
         float height = clamp(p.y * 0.35 + 0.5, 0.0, 1.0);
 
         vec3 plow  = p * 0.7 + wind3 * 0.6 + vec3(0.0, 0.0, uSeed);
+        vec3 pmid  = p * 1.1 + wind3 * 0.8 + vec3(0.3, 0.2, uSeed * 1.3);
         vec3 phigh = p * 1.6 + wind3 * 1.0 + vec3(0.0, 0.7, uSeed * 1.7);
 
         float nLow  = fbm3(plow);
+        float nMid  = fbm3(pmid);
         float nHigh = fbm3(phigh);
 
-        float lowLayer  = smoothstep(0.45, 0.7, nLow) * uCloudLow;
+        float lowLayer  = smoothstep(0.45, 0.7, nLow)  * uCloudLow;
+        float midLayer  = smoothstep(0.5,  0.75, nMid) * (uCloudLow * 0.7);
         float highLayer = smoothstep(0.55, 0.8, nHigh) * uCloudHigh;
 
-        float layer = lowLayer * (1.0 - height) + highLayer * height;
+        float layer = lowLayer * (1.0 - height) +
+                      midLayer * 0.7 +
+                      highLayer * height * 0.8;
 
         float stepDensity = layer * 0.09;
         density += stepDensity;
-
-        float lightSample = mix(0.4, 1.0, height) * stepDensity;
-        lightAccum += lightSample * exp(-density * 0.7);
     }
 
-    density    = clamp(density, 0.0, 1.6);
-    lightAccum = clamp(lightAccum, 0.0, 1.0);
+    density = clamp(density, 0.0, 1.6);
 
-    vec3 cloudColor = vec3(1.0);
-    if (uMode == 2 || uMode == 3) cloudColor = vec3(0.8, 0.82, 0.85);
-    if (uMode == 5) cloudColor = vec3(0.6, 0.65, 0.7);
+    float lightTerm = cloudLighting(p, uDayPhase, density);
+    float ambient   = 0.35 + 0.4 * uSunIntensity;
+    float lit       = clamp(ambient + lightTerm * 1.6, 0.0, 1.6);
 
-    vec3 baseLight = mix(vec3(0.35, 0.4, 0.5), vec3(1.0), lightAccum);
-    vec3 clouds    = mix(baseLight, cloudColor, density);
+    vec3 cloudColor = baseCloudColor * todTint * lit;
 
+    if (uMode == 3) {
+        cloudColor = mix(cloudColor, vec3(0.35, 0.37, 0.4), 0.25);
+    }
+
+    vec3 clouds = cloudColor;
     col = mix(col, clouds, clamp(density, 0.0, 1.0));
 
     // sun

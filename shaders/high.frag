@@ -144,6 +144,70 @@ float lightningFlash(float t, float intensity) {
 }
 
 // --------------------------------------------------------
+// Time-of-day & weather tints for clouds (PBR-ish)
+// --------------------------------------------------------
+
+vec3 timeOfDayTint(float dayPhase, int mode) {
+    // 0..1: 0 = midnight, 0.25 = sunrise, 0.5 = noon, 0.75 = sunset, 1 = midnight
+    float sunrise = smoothstep(0.0, 0.15, dayPhase);
+    float sunset  = smoothstep(1.0, 0.85, dayPhase);
+    float night   = step(dayPhase, 0.05) + step(0.95, dayPhase);
+
+    vec3 sunriseTint = vec3(1.25, 0.7, 0.6);  // orange/pink
+    vec3 sunsetTint  = vec3(1.3, 0.75, 0.65); // warmer orange/pink
+    vec3 nightTint   = vec3(0.6, 0.7, 1.0);   // bluish
+    vec3 dayTint     = vec3(1.0);
+
+    vec3 tint = dayTint;
+    tint = mix(tint, sunriseTint, sunrise);
+    tint = mix(tint, sunsetTint,  sunset);
+    tint = mix(tint, nightTint,   clamp(night, 0.0, 1.0));
+
+    // Slightly reduce tint at night for non-night modes
+    if (mode != 5) {
+        tint = mix(tint, dayTint, 0.3);
+    }
+
+    return tint;
+}
+
+vec3 weatherCloudBaseColor(int mode) {
+    if (mode == 2) { // rain
+        return vec3(0.78, 0.8, 0.83);
+    }
+    if (mode == 3) { // storm
+        return vec3(0.45, 0.48, 0.52);
+    }
+    if (mode == 4) { // snow
+        return vec3(0.95, 0.97, 1.0);
+    }
+    if (mode == 5) { // night
+        return vec3(0.6, 0.65, 0.7);
+    }
+    if (mode == 1) { // partly / cloudy
+        return vec3(0.92, 0.95, 0.98);
+    }
+    // clear
+    return vec3(1.0);
+}
+
+// Simple physically-inspired lighting term: sun direction vs "cloud normal"
+float cloudLighting(vec2 uv, float dayPhase, float density) {
+    // approximate sun direction on dome
+    float angle = dayPhase * 6.2831853;
+    vec3 sunDir = normalize(vec3(cos(angle), sin(angle), 0.4));
+
+    // fake normal from uv (curved dome)
+    vec3 n = normalize(vec3(uv - 0.5, 0.7));
+
+    float ndotl = clamp(dot(n, sunDir), 0.0, 1.0);
+
+    // more forward scattering for thin clouds, softer for dense
+    float scatter = pow(ndotl, mix(1.0, 4.0, density));
+    return scatter;
+}
+
+// --------------------------------------------------------
 // Main
 // --------------------------------------------------------
 
@@ -164,14 +228,20 @@ void main() {
     // unique seed per mode
     float seed = uSeed + float(uMode) * 37.123;
 
-    // cloud drift (wind‑aware)
+    // cloud drift (wind‑aware, stronger + layered)
+    float speedMul = 0.6 + uCloudSpeed * 0.8;
+
     vec2 driftLow = vec2(
-        sin(t * 0.05 * uCloudSpeed + seed) * 0.15 + uWind.x * 0.2,
-        cos(t * 0.03 * uCloudSpeed + seed * 1.3) * 0.08 + uWind.y * 0.1
+        sin(t * 0.03 * speedMul + seed) * 0.25 + uWind.x * 0.35,
+        cos(t * 0.02 * speedMul + seed * 1.3) * 0.18 + uWind.y * 0.25
+    );
+    vec2 driftMid = vec2(
+        sin(t * 0.05 * speedMul + seed * 0.7) * 0.18 + uWind.x * 0.25,
+        cos(t * 0.035 * speedMul + seed * 1.9) * 0.14 + uWind.y * 0.18
     );
     vec2 driftHigh = vec2(
-        sin(t * 0.02 * uCloudSpeed + seed * 0.7) * 0.1 + uWind.x * 0.1,
-        cos(t * 0.015 * uCloudSpeed + seed * 1.9) * 0.06 + uWind.y * 0.05
+        sin(t * 0.08 * speedMul + seed * 1.7) * 0.12 + uWind.x * 0.18,
+        cos(t * 0.06 * speedMul + seed * 2.3) * 0.1  + uWind.y * 0.12
     );
 
     // slight refraction for clouds
@@ -182,46 +252,79 @@ void main() {
         noise(baseUV * 6.0 - t * 0.17 + seed * 1.3)
     ) * refractStrength;
 
-    // cloud fields
-    float low  = fbm(refractUV * (3.0 + float(uQuality)) + driftLow + seed);
-    float high = fbm(refractUV * (8.0 + float(uQuality)) + driftHigh + seed * 1.7);
+    // ----------------------------------------------------
+    // Multi-layer clouds: low / mid / high
+    // ----------------------------------------------------
+
+    float lowNoise  = fbm(refractUV * (2.5 + float(uQuality)) + driftLow  + seed * 0.7);
+    float midNoise  = fbm(refractUV * (4.5 + float(uQuality)) + driftMid  + seed * 1.1);
+    float highNoise = fbm(refractUV * (8.0 + float(uQuality)) + driftHigh + seed * 1.7);
 
     float lowCloud  = 0.0;
+    float midCloud  = 0.0;
     float highCloud = 0.0;
 
     if (uMode == 0) {
         // clear
-        lowCloud  = smoothstep(0.7, 0.9, low) * 0.2;
-        highCloud = smoothstep(0.8, 0.95, high) * 0.15;
+        lowCloud  = smoothstep(0.75, 0.95, lowNoise)  * 0.15;
+        midCloud  = smoothstep(0.8,  0.96, midNoise)  * 0.1;
+        highCloud = smoothstep(0.82, 0.97, highNoise) * 0.2;
     } else if (uMode == 1) {
         // partly / cloudy
-        lowCloud  = smoothstep(0.45, 0.75, low) * uCloudLow;
-        highCloud = smoothstep(0.55, 0.85, high) * uCloudHigh * 0.7;
+        lowCloud  = smoothstep(0.5, 0.78, lowNoise)  * uCloudLow;
+        midCloud  = smoothstep(0.55, 0.8, midNoise)  * (uCloudLow * 0.7);
+        highCloud = smoothstep(0.6, 0.85, highNoise) * (uCloudHigh * 0.8);
     } else if (uMode == 2) {
         // rain
-        lowCloud  = smoothstep(0.35, 0.65, low) * uCloudLow * 1.2;
-        highCloud = smoothstep(0.5, 0.8, high) * uCloudHigh * 0.5;
+        lowCloud  = smoothstep(0.4, 0.7, lowNoise)   * uCloudLow * 1.3;
+        midCloud  = smoothstep(0.5, 0.78, midNoise)  * uCloudLow;
+        highCloud = smoothstep(0.6, 0.85, highNoise) * uCloudHigh * 0.6;
     } else if (uMode == 3) {
         // storm
-        lowCloud  = smoothstep(0.3, 0.6, low) * uCloudLow * 1.5;
-        highCloud = smoothstep(0.45, 0.75, high) * uCloudHigh * 0.8;
+        lowCloud  = smoothstep(0.35, 0.65, lowNoise)  * uCloudLow * 1.6;
+        midCloud  = smoothstep(0.45, 0.7,  midNoise)  * uCloudLow * 1.2;
+        highCloud = smoothstep(0.55, 0.8,  highNoise) * uCloudHigh * 0.7;
     } else if (uMode == 4) {
         // snow
-        lowCloud  = smoothstep(0.4, 0.7, low) * uCloudLow;
-        highCloud = smoothstep(0.55, 0.85, high) * uCloudHigh;
+        lowCloud  = smoothstep(0.45, 0.72, lowNoise)  * uCloudLow * 1.1;
+        midCloud  = smoothstep(0.55, 0.8,  midNoise)  * uCloudLow;
+        highCloud = smoothstep(0.6,  0.85, highNoise) * uCloudHigh;
     } else if (uMode == 5) {
         // night
-        lowCloud  = smoothstep(0.55, 0.85, low) * uCloudLow * 0.4;
-        highCloud = smoothstep(0.65, 0.9, high) * uCloudHigh * 0.3;
+        lowCloud  = smoothstep(0.6, 0.85, lowNoise)   * uCloudLow * 0.5;
+        midCloud  = smoothstep(0.65, 0.88, midNoise)  * uCloudLow * 0.4;
+        highCloud = smoothstep(0.7, 0.9,  highNoise)  * uCloudHigh * 0.35;
     }
 
-    float cloudCombined = clamp(lowCloud + highCloud, 0.0, 1.0);
+    // combine layers with slight height weighting
+    float cloudCombined = clamp(
+        lowCloud * 0.55 +
+        midCloud * 0.3  +
+        highCloud * 0.25,
+        0.0, 1.0
+    );
 
-    vec3 cloudColor = vec3(1.0);
-    if (uMode == 2 || uMode == 3) cloudColor = vec3(0.8, 0.82, 0.85);
-    if (uMode == 5) cloudColor = vec3(0.6, 0.65, 0.7);
+    // ----------------------------------------------------
+    // Cloud color: weather base * time-of-day tint * lighting
+    // ----------------------------------------------------
 
-    col = mix(col, cloudColor, cloudCombined * 0.85);
+    vec3 baseCloudColor = weatherCloudBaseColor(uMode);
+    vec3 todTint        = timeOfDayTint(uDayPhase, uMode);
+
+    // approximate lighting term (PBR-ish)
+    float lightTerm = cloudLighting(vUv, uDayPhase, cloudCombined);
+    float ambient   = 0.35 + 0.4 * uSunIntensity; // base ambient from sun
+
+    float lit = clamp(ambient + lightTerm * 1.4, 0.0, 1.5);
+
+    vec3 cloudColor = baseCloudColor * todTint * lit;
+
+    // slightly clamp for storms so they don't blow out
+    if (uMode == 3) {
+        cloudColor = mix(cloudColor, vec3(0.35, 0.37, 0.4), 0.25);
+    }
+
+    col = mix(col, cloudColor, cloudCombined * 0.9);
 
     // sun (driven by dayPhase)
     col = addSun(col, vUv, uDayPhase, uMode, uSunIntensity);
@@ -248,7 +351,7 @@ void main() {
     float fog = uFogDensity * smoothstep(0.0, 0.4, 1.0 - vUv.y);
     col = mix(col, vec3(0.7, 0.75, 0.8), fog);
 
-    // subtle dayPhase warm tint at sunrise/sunset
+    // subtle global warm tint at sunrise/sunset
     float warm = smoothstep(0.0, 0.15, uDayPhase) +
                  smoothstep(1.0, 0.85, uDayPhase);
     warm = clamp(warm, 0.0, 1.0);

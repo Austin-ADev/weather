@@ -35,7 +35,7 @@
   <!-- HEADER -->
   <div class="city-header">
     <div>
-      <div class="city-name">City</div>
+      <div class="city-name" id="cityName">City</div>
       <div class="localtime" id="localtime">--:--</div>
     </div>
 
@@ -50,8 +50,8 @@
     <div class="icon-and-temp">
       <div class="weather-icon" id="currentIcon"></div>
       <div>
-        <div class="temp">--°F</div>
-        <div class="condition">--</div>
+        <div class="temp" id="temp">--°F</div>
+        <div class="condition" id="condition">--</div>
       </div>
     </div>
   </div>
@@ -69,14 +69,14 @@
     </div>
   </div>
 
-  <!-- 24-HOUR FORECAST -->
-  <div class="forecast-title collapsible" id="hourlyToggle">
-  <span>Next 24 Hours</span>
-  <svg class="chevron" viewBox="0 0 24 24">
-    <path d="M6 9l6 6 6-6"/>
-  </svg>
-</div>
-  <div id="forecast"></div>
+  <!-- 24-HOUR FORECAST (COLLAPSIBLE) -->
+  <div class="forecast-title collapsible open" id="hourlyToggle">
+    <span>Next 24 Hours</span>
+    <svg class="chevron" viewBox="0 0 24 24">
+      <path d="M6 9l6 6 6-6"/>
+    </svg>
+  </div>
+  <div id="forecast" class="open"></div>
 
   <!-- 7-DAY FORECAST -->
   <div class="forecast-title">Next 7 Days</div>

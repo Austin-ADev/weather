@@ -17,6 +17,7 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: -1;
+  transition: opacity 0.35s ease;
 }
 
 /* Weather box */
@@ -30,6 +31,13 @@ html, body {
   background: rgba(10, 10, 15, 0.82);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.8);
   color: #f8f9ff;
+  transition: opacity 0.35s ease;
+}
+
+/* Fade states */
+.weather-box.fade-out,
+#sky.fade-out {
+  opacity: 0;
 }
 
 /* SEARCH BAR */
@@ -188,9 +196,39 @@ html, body {
   padding-bottom: 6px;
 }
 
+/* Collapsible 24h */
+.collapsible {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chevron {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  transition: transform 0.25s ease;
+  opacity: 0.8;
+}
+
+.collapsible.open .chevron {
+  transform: rotate(180deg);
+}
+
 /* 24-hour forecast */
 #forecast {
   margin-top: 10px;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.35s ease;
+}
+
+#forecast.open {
+  max-height: 800px;
 }
 
 .forecast-hour {
@@ -222,7 +260,7 @@ html, body {
   border-radius: 20px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.12);
-  height: 300px; /* Bigger radar */
+  height: 300px;
 }
 
 #radarFrame {
@@ -230,36 +268,13 @@ html, body {
   height: 100%;
   border: none;
 }
-/* Collapsible title */
-.collapsible {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  user-select: none;
-}
 
-.chevron {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: #fff;
-  stroke-width: 2;
-  transition: transform 0.25s ease;
-  opacity: 0.8;
+/* Weather icon container */
+.weather-icon {
+  width: 64px;
+  height: 64px;
 }
-
-.collapsible.open .chevron {
-  transform: rotate(180deg);
-}
-
-/* Collapsible content animation */
-#forecast {
-  overflow: hidden;
-  max-height: 0;
-  transition: max-height 0.35s ease;
-}
-
-#forecast.open {
-  max-height: 800px; /* enough to show all hours */
+.weather-icon svg {
+  width: 100%;
+  height: 100%;
 }
