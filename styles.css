@@ -230,3 +230,36 @@ html, body {
   height: 100%;
   border: none;
 }
+/* Collapsible title */
+.collapsible {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chevron {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  transition: transform 0.25s ease;
+  opacity: 0.8;
+}
+
+.collapsible.open .chevron {
+  transform: rotate(180deg);
+}
+
+/* Collapsible content animation */
+#forecast {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.35s ease;
+}
+
+#forecast.open {
+  max-height: 800px; /* enough to show all hours */
+}
