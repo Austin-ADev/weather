@@ -195,8 +195,8 @@ export const WeatherEngine = {
       lightning = f > 0.96 ? this.lightningBase : 0.0;
     }
 
-    // time‑of‑day phase (0..1)
-    const dayPhase = (timeSeconds * 0.02) % 1.0;
+    // 5‑hour full cycle for day/night (can be adjusted as needed)
+    const dayPhase = (timeSeconds / (5 * 3600.0)) % 1.0;
 
     return {
       mode: this.mode,

@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Weather Dashboard</title>
+  <meta charset="UTF-8">
+  <title>Weather</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -9,17 +10,75 @@
 <canvas id="sky"></canvas>
 
 <div class="weather-box">
-  <input id="citySearch" placeholder="Search city...">
 
-  <div class="city-name">Loading...</div>
-  <div class="temp">--°F</div>
-  <div class="condition">--</div>
+  <!-- SEARCH BAR WITH ICONS -->
+  <div class="search-wrapper">
+    <input id="citySearch" placeholder="Search city..." autocomplete="off" />
 
-  <div class="details">
-    <div class="detail-row"><span>Humidity</span><span id="humidity">--</span></div>
-    <div class="detail-row"><span>Wind</span><span id="wind">--</span></div>
-    <div class="detail-row"><span>Feels Like</span><span id="feels">--</span></div>
+    <!-- Location icon -->
+    <button id="detectLocation" class="search-icon-btn" title="Use my location">
+      📍
+    </button>
+
+    <!-- Voice icon -->
+    <button id="voiceSearch" class="search-icon-btn" title="Voice search">
+      🎤
+    </button>
   </div>
+
+  <div id="searchResults"></div>
+
+  <!-- HEADER -->
+  <div class="city-header">
+    <div>
+      <div class="city-name">City</div>
+      <div class="localtime" id="localtime">--:--</div>
+    </div>
+
+    <div class="moon-phase">
+      <div class="moon-icon"></div>
+      <span id="moonLabel">Moon</span>
+    </div>
+  </div>
+
+  <!-- CURRENT WEATHER -->
+  <div class="current-row">
+    <div class="icon-and-temp">
+      <div class="weather-icon" id="currentIcon"></div>
+      <div>
+        <div class="temp">--°F</div>
+        <div class="condition">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAILS -->
+  <div class="details">
+    <div class="detail-row">
+      <span>Humidity</span><span id="humidity">--%</span>
+    </div>
+    <div class="detail-row">
+      <span>Wind</span><span id="wind">-- mph</span>
+    </div>
+    <div class="detail-row">
+      <span>Feels Like</span><span id="feels">--°F</span>
+    </div>
+  </div>
+
+  <!-- 24-HOUR FORECAST -->
+  <div class="forecast-title">Next 24 Hours</div>
+  <div id="forecast"></div>
+
+  <!-- 7-DAY FORECAST -->
+  <div class="forecast-title">Next 7 Days</div>
+  <div id="dailyForecast"></div>
+
+  <!-- RADAR -->
+  <div class="forecast-title">Radar</div>
+  <div id="radarContainer">
+    <iframe id="radarFrame" loading="lazy"></iframe>
+  </div>
+
 </div>
 
 <script type="module" src="app.js"></script>
