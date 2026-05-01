@@ -24,11 +24,10 @@ async function init(){
 
   await Sky.init(gl, shaderSets);
 
-  // expose tier switching in console
+  // expose AFTER init succeeds
   window.setTier = async function(tier){
-    Sky.setTier(tier);
-    // re-init with new tier
-    await Sky.init(gl, shaderSets);
+    console.log("[WeatherShader] Switching tier to", tier);
+    await Sky.switchTier(tier);
   };
 
   document.getElementById("citySearch").addEventListener("keydown", e=>{
@@ -60,9 +59,9 @@ async function loadWeather(city){
   document.querySelector(".city-name").textContent = `${name}, ${country}`;
   document.querySelector(".temp").textContent = `${Math.round(c.temperature)}°F`;
   document.querySelector(".condition").textContent = Weather.describe(c.weathercode);
-  document.getElementById("humidity").textContent = c.relative_humidity + "%";
-  document.getElementById("wind").textContent = c.windspeed + " mph";
-  document.getElementById("feels").textContent = Math.round(c.apparent_temperature) + "°F";
+  document.getElementById("humidity").textContent = (c.relative_humidity ?? "--") + "%";
+  document.getElementById("wind").textContent = (c.windspeed ?? "--") + " mph";
+  document.getElementById("feels").textContent = (Math.round(c.apparent_temperature) || "--") + "°F";
 
   Sky.setMode(Weather.map(c.weathercode));
 }
