@@ -1,5 +1,6 @@
+// app.js
 import { Sky } from "./sky/sky.js";
-import { Weather } from "./sky/weather.js";
+import { WeatherEngine } from "./sky/weatherEngine.js";
 
 async function init() {
   const canvas = document.getElementById("sky");
@@ -67,7 +68,7 @@ async function loadWeather(city) {
 
     document.querySelector(".city-name").textContent = `${name}, ${country}`;
     document.querySelector(".temp").textContent = `${Math.round(c.temperature)}°F`;
-    document.querySelector(".condition").textContent = Weather.describe(c.weathercode);
+    document.querySelector(".condition").textContent = WeatherEngine.describe(c.weathercode);
     document.getElementById("humidity").textContent =
       (c.relative_humidity ?? "--") + "%";
     document.getElementById("wind").textContent =
@@ -75,13 +76,7 @@ async function loadWeather(city) {
     document.getElementById("feels").textContent =
       (c.apparent_temperature != null ? Math.round(c.apparent_temperature) : "--") + "°F";
 
-    const mode = Weather.map(c.weathercode);
-    const speed = Weather.cloudSpeed(c.weathercode);
-    const seed = Weather.seedFor(city, c.weathercode);
-
-    Sky.setMode(mode);
-    Sky.setCloudSpeed(speed);
-    Sky.setSeed(seed);
+    WeatherEngine.setFromAPI(name, c.weathercode);
   } catch (e) {
     console.error(e);
   }

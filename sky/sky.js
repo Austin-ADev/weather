@@ -1,5 +1,5 @@
-import { Clouds } from "./clouds.js";
-import { Lighting } from "./lighting.js";
+// sky/sky.js
+import { WeatherEngine } from "./weatherEngine.js";
 
 async function loadText(url) {
   const r = await fetch(url);
@@ -43,9 +43,6 @@ export const Sky = {
   uniforms: {},
   shaderSets: null,
   tier: 1,
-  mode: 0,
-  seed: Math.random() * 1000,
-  cloudSpeed: 1.0,
   timeStart: performance.now(),
 
   async init(gl, shaderSets) {
@@ -65,12 +62,13 @@ export const Sky = {
       uCloudHigh: u("uCloudHigh"),
       uSunIntensity: u("uSunIntensity"),
       uLightning: u("uLightning"),
-      uCloudSpeed: u("uCloudSpeed")
+      uCloudSpeed: u("uCloudSpeed"),
+      uFogDensity: u("uFogDensity"),
+      uWind: u("uWind"),
+      uDayPhase: u("uDayPhase")
     };
 
     gl.uniform1i(this.uniforms.uQuality, this.tier);
-    gl.uniform1f(this.uniforms.uSeed, this.seed);
-    gl.uniform1f(this.uniforms.uCloudSpeed, this.cloudSpeed);
 
     const quad = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
@@ -114,34 +112,32 @@ export const Sky = {
       uCloudHigh: u("uCloudHigh"),
       uSunIntensity: u("uSunIntensity"),
       uLightning: u("uLightning"),
-      uCloudSpeed: u("uCloudSpeed")
+      uCloudSpeed: u("uCloudSpeed"),
+      uFogDensity: u("uFogDensity"),
+      uWind: u("uWind"),
+      uDayPhase: u("uDayPhase")
     };
 
     this.gl.uniform1i(this.uniforms.uQuality, this.tier);
-    this.gl.uniform1f(this.uniforms.uSeed, this.seed);
-    this.gl.uniform1f(this.uniforms.uCloudSpeed, this.cloudSpeed);
   },
-
-  setMode(m) { this.mode = m; },
-  setSeed(s) { this.seed = s; },
-  setCloudSpeed(s) { this.cloudSpeed = s; },
 
   update() {
     const gl = this.gl;
     const t = (performance.now() - this.timeStart) / 1000;
 
+    const state = WeatherEngine.update(t);
+
     gl.uniform1f(this.uniforms.uTime, t);
     gl.uniform2f(this.uniforms.uResolution, gl.canvas.width, gl.canvas.height);
-    gl.uniform1i(this.uniforms.uMode, this.mode);
-    gl.uniform1f(this.uniforms.uSeed, this.seed);
-    gl.uniform1f(this.uniforms.uCloudSpeed, this.cloudSpeed);
-
-    const cloud = Clouds.compute(this.mode, t);
-    const light = Lighting.compute(this.mode, t);
-
-    gl.uniform1f(this.uniforms.uCloudLow, cloud.low);
-    gl.uniform1f(this.uniforms.uCloudHigh, cloud.high);
-    gl.uniform1f(this.uniforms.uSunIntensity, light.sun);
-    gl.uniform1f(this.uniforms.uLightning, light.lightning);
+    gl.uniform1i(this.uniforms.uMode, state.mode);
+    gl.uniform1f(this.uniforms.uSeed, state.seed);
+    gl.uniform1f(this.uniforms.uCloudLow, state.cloudLow);
+    gl.uniform1f(this.uniforms.uCloudHigh, state.cloudHigh);
+    gl.uniform1f(this.uniforms.uSunIntensity, state.sunIntensity);
+    gl.uniform1f(this.uniforms.uLightning, state.lightning);
+    gl.uniform1f(this.uniforms.uCloudSpeed, state.cloudSpeed);
+    gl.uniform1f(this.uniforms.uFogDensity, state.fogDensity);
+    gl.uniform2f(this.uniforms.uWind, state.windX, state.windY);
+    gl.uniform1f(this.uniforms.uDayPhase, state.dayPhase);
   }
 };
