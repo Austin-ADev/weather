@@ -40,10 +40,10 @@ resizeCanvas();
 
 // Shader tiers
 const shaderSets = [
-  { tier: 1, vert: "sky/vert.glsl", frag: "sky/perf.frag" },
-  { tier: 2, vert: "sky/vert.glsl", frag: "sky/high.frag" },
-  { tier: 3, vert: "sky/vert.glsl", frag: "sky/ultraB.frag" },
-  { tier: 4, vert: "sky/vert.glsl", frag: "sky/ultraC.frag" }
+  { tier: 1, vert: "shaders/vert.glsl", frag: "sky/perf.frag" },
+  { tier: 2, vert: "shaders/vert.glsl", frag: "sky/high.frag" },
+  { tier: 3, vert: "shaders/vert.glsl", frag: "sky/ultraB.frag" },
+  { tier: 4, vert: "shaders/vert.glsl", frag: "sky/ultraC.frag" }
 ];
 
 // Fade helpers
