@@ -20,6 +20,10 @@ html, body {
   transition: opacity 0.35s ease;
 }
 
+#sky.fade-out {
+  opacity: 0;
+}
+
 /* Weather box */
 .weather-box {
   position: relative;
@@ -31,12 +35,14 @@ html, body {
   background: rgba(10, 10, 15, 0.82);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.8);
   color: #f8f9ff;
+}
+
+/* Weather content fade */
+.weather-content {
   transition: opacity 0.35s ease;
 }
 
-/* Fade states */
-.weather-box.fade-out,
-#sky.fade-out {
+.weather-content.fade-out {
   opacity: 0;
 }
 
@@ -260,7 +266,7 @@ html, body {
   border-radius: 20px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.12);
-  height: 300px;
+  height: 360px;
 }
 
 #radarFrame {

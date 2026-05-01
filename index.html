@@ -10,84 +10,86 @@
 <canvas id="sky"></canvas>
 
 <div class="weather-box">
+  <div class="weather-content" id="weatherContent">
 
-  <!-- SEARCH BAR WITH ICONS -->
-  <div class="search-wrapper">
-    <input id="citySearch" placeholder="Search city..." autocomplete="off" />
+    <!-- SEARCH BAR WITH ICONS -->
+    <div class="search-wrapper">
+      <input id="citySearch" placeholder="Search city..." autocomplete="off" />
 
-    <!-- Location icon -->
-    <button id="detectLocation" class="search-icon-btn" title="Use my location">
-      <svg viewBox="0 0 24 24" class="icon">
-        <path d="M12 2a1 1 0 0 1 1 1v1.07a8.002 8.002 0 0 1 7.93 7.93H22a1 1 0 1 1 0 2h-1.07a8.002 8.002 0 0 1-7.93 7.93V22a1 1 0 1 1-2 0v-1.07a8.002 8.002 0 0 1-7.93-7.93H2a1 1 0 1 1 0-2h1.07a8.002 8.002 0 0 1 7.93-7.93V3a1 1 0 0 1 1-1zm0 5a5 5 0 1 0 0 10a5 5 0 0 0 0-10z"/>
-      </svg>
-    </button>
+      <!-- Location icon -->
+      <button id="detectLocation" class="search-icon-btn" title="Use my location">
+        <svg viewBox="0 0 24 24" class="icon">
+          <path d="M12 2a1 1 0 0 1 1 1v1.07a8.002 8.002 0 0 1 7.93 7.93H22a1 1 0 1 1 0 2h-1.07a8.002 8.002 0 0 1-7.93 7.93V22a1 1 0 1 1-2 0v-1.07a8.002 8.002 0 0 1-7.93-7.93H2a1 1 0 1 1 0-2h1.07a8.002 8.002 0 0 1 7.93-7.93V3a1 1 0 0 1 1-1zm0 5a5 5 0 1 0 0 10a5 5 0 0 0 0-10z"/>
+        </svg>
+      </button>
 
-    <!-- Voice icon -->
-    <button id="voiceSearch" class="search-icon-btn" title="Voice search">
-      <svg viewBox="0 0 24 24" class="icon">
-        <path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V5a3 3 0 0 1 3-3zm-7 9a1 1 0 1 1 2 0a5 5 0 0 0 10 0a1 1 0 1 1 2 0a7 7 0 0 1-6 6.93V21h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-3.07A7 7 0 0 1 5 11z"/>
-      </svg>
-    </button>
-  </div>
-
-  <div id="searchResults"></div>
-
-  <!-- HEADER -->
-  <div class="city-header">
-    <div>
-      <div class="city-name" id="cityName">City</div>
-      <div class="localtime" id="localtime">--:--</div>
+      <!-- Voice icon -->
+      <button id="voiceSearch" class="search-icon-btn" title="Voice search">
+        <svg viewBox="0 0 24 24" class="icon">
+          <path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V5a3 3 0 0 1 3-3zm-7 9a1 1 0 1 1 2 0a5 5 0 0 0 10 0a1 1 0 1 1 2 0a7 7 0 0 1-6 6.93V21h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-3.07A7 7 0 0 1 5 11z"/>
+        </svg>
+      </button>
     </div>
 
-    <div class="moon-phase">
-      <div class="moon-icon"></div>
-      <span id="moonLabel">Moon</span>
-    </div>
-  </div>
+    <div id="searchResults"></div>
 
-  <!-- CURRENT WEATHER -->
-  <div class="current-row">
-    <div class="icon-and-temp">
-      <div class="weather-icon" id="currentIcon"></div>
+    <!-- HEADER -->
+    <div class="city-header">
       <div>
-        <div class="temp" id="temp">--°F</div>
-        <div class="condition" id="condition">--</div>
+        <div class="city-name" id="cityName">City</div>
+        <div class="localtime" id="localtime">--:--</div>
+      </div>
+
+      <div class="moon-phase">
+        <div class="moon-icon"></div>
+        <span id="moonLabel">Moon</span>
       </div>
     </div>
-  </div>
 
-  <!-- DETAILS -->
-  <div class="details">
-    <div class="detail-row">
-      <span>Humidity</span><span id="humidity">--%</span>
+    <!-- CURRENT WEATHER -->
+    <div class="current-row">
+      <div class="icon-and-temp">
+        <div class="weather-icon" id="currentIcon"></div>
+        <div>
+          <div class="temp" id="temp">--°F</div>
+          <div class="condition" id="condition">--</div>
+        </div>
+      </div>
     </div>
-    <div class="detail-row">
-      <span>Wind</span><span id="wind">-- mph</span>
+
+    <!-- DETAILS -->
+    <div class="details">
+      <div class="detail-row">
+        <span>Humidity</span><span id="humidity">--%</span>
+      </div>
+      <div class="detail-row">
+        <span>Wind</span><span id="wind">-- mph</span>
+      </div>
+      <div class="detail-row">
+        <span>Feels Like</span><span id="feels">--°F</span>
+      </div>
     </div>
-    <div class="detail-row">
-      <span>Feels Like</span><span id="feels">--°F</span>
+
+    <!-- 24-HOUR FORECAST (COLLAPSIBLE) -->
+    <div class="forecast-title collapsible open" id="hourlyToggle">
+      <span>Next 24 Hours</span>
+      <svg class="chevron" viewBox="0 0 24 24">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
     </div>
+    <div id="forecast" class="open"></div>
+
+    <!-- 7-DAY FORECAST -->
+    <div class="forecast-title">Next 7 Days</div>
+    <div id="dailyForecast"></div>
+
+    <!-- RADAR -->
+    <div class="forecast-title">Radar</div>
+    <div id="radarContainer">
+      <iframe id="radarFrame" loading="lazy"></iframe>
+    </div>
+
   </div>
-
-  <!-- 24-HOUR FORECAST (COLLAPSIBLE) -->
-  <div class="forecast-title collapsible open" id="hourlyToggle">
-    <span>Next 24 Hours</span>
-    <svg class="chevron" viewBox="0 0 24 24">
-      <path d="M6 9l6 6 6-6"/>
-    </svg>
-  </div>
-  <div id="forecast" class="open"></div>
-
-  <!-- 7-DAY FORECAST -->
-  <div class="forecast-title">Next 7 Days</div>
-  <div id="dailyForecast"></div>
-
-  <!-- RADAR -->
-  <div class="forecast-title">Radar</div>
-  <div id="radarContainer">
-    <iframe id="radarFrame" loading="lazy"></iframe>
-  </div>
-
 </div>
 
 <script type="module" src="app.js"></script>

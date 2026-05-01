@@ -15,10 +15,13 @@ export const WeatherEngine = {
   // target state (for transitions)
   _target: null,
   _transitionStart: 0,
-  _transitionDuration: 8.0, // seconds
+  _transitionDuration: 6.0, // a bit snappier
 
   city: "Unknown",
   code: 0,
+
+  // pseudo day-phase offset per city so multiple tabs don't look identical
+  _dayPhaseOffset: 0.0,
 
   map(code) {
     if ([0].includes(code)) return 0; // clear
@@ -88,10 +91,10 @@ export const WeatherEngine = {
   _sunBaseFor(mode) {
     if (mode === 0) return 1.0;
     if (mode === 1) return 0.8;
-    if (mode === 2) return 0.4;
+    if (mode === 2) return 0.45;
     if (mode === 4) return 0.6;
     if (mode === 5) return 0.0;
-    if (mode === 3) return 0.2;
+    if (mode === 3) return 0.25;
     return 0.7;
   },
 
@@ -101,15 +104,14 @@ export const WeatherEngine = {
   },
 
   _fogFor(mode) {
-    if (mode === 2) return 0.15; // rain
-    if (mode === 3) return 0.25; // storm
-    if (mode === 4) return 0.2;  // snow
-    if (mode === 5) return 0.05; // night haze
+    if (mode === 2) return 0.16; // rain
+    if (mode === 3) return 0.26; // storm
+    if (mode === 4) return 0.22; // snow
+    if (mode === 5) return 0.06; // night haze
     return 0.03; // clear / cloudy
   },
 
   _windFor(code) {
-    // simple: storms & rain = stronger, random-ish direction
     const baseAngle =
       (this._hashString(this.city + ":" + code) % 360) * (Math.PI / 180);
     let strength = 0.3;
@@ -137,7 +139,9 @@ export const WeatherEngine = {
     const fogDensity = this._fogFor(targetMode);
     const windDir = this._windFor(code);
 
-    // start a transition from current → target
+    // pseudo day-phase offset per city (keeps cycles de-synced)
+    this._dayPhaseOffset = (seedHash % 86400) / 86400;
+
     this._target = {
       mode: targetMode,
       seed,
@@ -164,39 +168,46 @@ export const WeatherEngine = {
   },
 
   update(timeSeconds) {
-    // handle transition
+    // transition between weather states
     if (this._target) {
       const elapsed = timeSeconds - this._transitionStart;
-      const t = Math.min(elapsed / this._transitionDuration, 1.0);
+      const tRaw = Math.min(elapsed / this._transitionDuration, 1.0);
+      // ease in/out for smoother cloud morph
+      const t = tRaw * tRaw * (3 - 2 * tRaw);
 
-      // mode snaps when halfway through
       if (t >= 0.5) this.mode = this._target.mode;
 
-      this.seed = this._lerp(this.seed, this._target.seed, t);
-      this.cloudLow = this._lerp(this.cloudLow, this._target.cloudLow, t);
-      this.cloudHigh = this._lerp(this.cloudHigh, this._target.cloudHigh, t);
-      this.cloudSpeed = this._lerp(this.cloudSpeed, this._target.cloudSpeed, t);
-      this.sunBase = this._lerp(this.sunBase, this._target.sunBase, t);
+      this.seed        = this._lerp(this.seed,        this._target.seed,        t);
+      this.cloudLow    = this._lerp(this.cloudLow,    this._target.cloudLow,    t);
+      this.cloudHigh   = this._lerp(this.cloudHigh,   this._target.cloudHigh,   t);
+      this.cloudSpeed  = this._lerp(this.cloudSpeed,  this._target.cloudSpeed,  t);
+      this.sunBase     = this._lerp(this.sunBase,     this._target.sunBase,     t);
       this.lightningBase = this._lerp(
         this.lightningBase,
         this._target.lightningBase,
         t
       );
-      this.fogDensity = this._lerp(this.fogDensity, this._target.fogDensity, t);
-      this.windDir = this._lerpVec(this.windDir, this._target.windDir, t);
+      this.fogDensity  = this._lerp(this.fogDensity,  this._target.fogDensity,  t);
+      this.windDir     = this._lerpVec(this.windDir,  this._target.windDir,     t);
 
-      if (t >= 1.0) this._target = null;
+      if (tRaw >= 1.0) this._target = null;
     }
 
-    // storm lightning
+    // storm lightning: irregular but cheap
     let lightning = 0.0;
     if (this.mode === 3) {
-      const f = Math.sin(timeSeconds * 7.0);
-      lightning = f > 0.96 ? this.lightningBase : 0.0;
+      const f = Math.sin(timeSeconds * 5.7 + this.seed * 0.13);
+      const g = Math.sin(timeSeconds * 9.1 + this.seed * 0.37);
+      const pulse = Math.max(f, g);
+      lightning = pulse > 0.92 ? this.lightningBase : 0.0;
     }
 
-    // 5‑hour full cycle for day/night (can be adjusted as needed)
-    const dayPhase = (timeSeconds / (5 * 3600.0)) % 1.0;
+    // dayPhase: 24h loop with per-city offset
+    const secondsInDay = 24 * 3600;
+    const dayPhase = ((timeSeconds / secondsInDay) + this._dayPhaseOffset) % 1.0;
+
+    // slight modulation of sun by dayPhase (shaders already warm/cool)
+    const sunIntensity = this.sunBase * (0.4 + 0.6 * Math.sin(dayPhase * Math.PI));
 
     return {
       mode: this.mode,
@@ -204,7 +215,7 @@ export const WeatherEngine = {
       cloudLow: this.cloudLow,
       cloudHigh: this.cloudHigh,
       cloudSpeed: this.cloudSpeed,
-      sunIntensity: this.sunBase,
+      sunIntensity,
       lightning,
       fogDensity: this.fogDensity,
       windX: this.windDir.x,
