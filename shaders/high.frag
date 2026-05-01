@@ -7,12 +7,16 @@ uniform vec2 uResolution;
 uniform int uMode;
 uniform int uQuality;
 
-// hash
+// -----------------------------------------------------
+// HASH
+// -----------------------------------------------------
 float hash(vec2 p){
     return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123);
 }
 
-// noise
+// -----------------------------------------------------
+// NOISE
+// -----------------------------------------------------
 float noise(vec2 p){
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -26,7 +30,9 @@ float noise(vec2 p){
            (d-b)*u.x*u.y;
 }
 
-// fbm
+// -----------------------------------------------------
+// FBM
+// -----------------------------------------------------
 float fbm(vec2 p){
     float v = 0.0;
     float a = 0.5;
@@ -38,7 +44,9 @@ float fbm(vec2 p){
     return v;
 }
 
-// sky gradient
+// -----------------------------------------------------
+// SKY COLOR
+// -----------------------------------------------------
 vec3 skyColor(float h, int mode){
     if(mode == 5) return mix(vec3(0.02,0.03,0.08), vec3(0.01,0.02,0.05), h);
     if(mode == 3) return mix(vec3(0.2,0.2,0.25), vec3(0.05,0.05,0.08), h);
@@ -48,30 +56,56 @@ vec3 skyColor(float h, int mode){
     return mix(vec3(0.6,0.75,1.0), vec3(0.2,0.3,0.5), h);
 }
 
+// -----------------------------------------------------
+// MAIN
+// -----------------------------------------------------
 void main(){
     float h = vUv.y;
 
-    // uResolution actually affects output now
+    // -------------------------------------------------
+    // FORCE uResolution TO STAY ALIVE (3 methods)
+    // -------------------------------------------------
+
+    // Method 1: control-flow dependency
+    if (uResolution.x < 0.0) {
+        gl_FragColor = vec4(1.0,0.0,0.0,1.0);
+        return;
+    }
+
+    // Method 2: discard dependency
+    if (uResolution.y < 0.0) {
+        discard;
+    }
+
+    // Method 3: color-path dependency
     float aspect = uResolution.x / max(uResolution.y, 1.0);
 
-    // uTime
+    // -------------------------------------------------
+    // TIME + QUALITY
+    // -------------------------------------------------
     float t = uTime * 0.05;
-
-    // uQuality
     float q = float(uQuality);
 
-    // base sky
+    // -------------------------------------------------
+    // BASE SKY
+    // -------------------------------------------------
     vec3 col = skyColor(h, uMode);
 
-    // clouds (animated, quality‑scaled)
+    // -------------------------------------------------
+    // CLOUDS
+    // -------------------------------------------------
     float c = fbm(vUv * (3.0 + q) + vec2(t, t*0.7));
     float cloud = smoothstep(0.5, 0.8, c);
     col = mix(col, vec3(1.0), cloud * 0.6);
 
-    // tiny noise to guarantee uniforms stay alive
+    // -------------------------------------------------
+    // NOISE
+    // -------------------------------------------------
     col += noise(vUv * (10.0 + q) + t) * 0.02;
 
-    // bake aspect in so uResolution can’t be optimized out
+    // -------------------------------------------------
+    // BAKE ASPECT INTO COLOR (guarantees uniform survival)
+    // -------------------------------------------------
     col += vec3(aspect * 0.001);
 
     gl_FragColor = vec4(col, 1.0);
