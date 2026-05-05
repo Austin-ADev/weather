@@ -85,7 +85,13 @@ function fadeInSky() {
 // ---------- Radar ----------
 function setRadar(lat, lon) {
   log.radar("Setting radar with:", { lat, lon });
-  const url = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&level=surface&overlay=radar`;
+  const url =
+  `https://api.open-meteo.com/v1/forecast` +
+  `?latitude=${lat}&longitude=${lon}` +
+  `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m` +
+  `&hourly=temperature_2m,weather_code` +
+  `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase` +
+  `&timezone=auto`;
   radarFrame.src = url;
 }
 
