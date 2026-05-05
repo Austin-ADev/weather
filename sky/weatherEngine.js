@@ -2,7 +2,7 @@
 
 export const WeatherEngine = {
   mode: 0,
-  seed: 123.0,
+  seed: 123,
   cloudLow: 0.5,
   cloudHigh: 0.3,
   cloudSpeed: 0.6,
@@ -13,20 +13,11 @@ export const WeatherEngine = {
 
   _target: null,
   _transitionStart: 0,
-  _transitionDuration: 6.0,
+  _transitionDuration: 5.0,
 
   city: "Unknown",
   code: 0,
-  _dayPhaseOffset: 0.0,
-
-  map(code) {
-    if ([0].includes(code)) return 0;
-    if ([1, 2, 3].includes(code)) return 1;
-    if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return 2;
-    if ([95, 96, 99].includes(code)) return 3;
-    if ([71, 73, 75, 77, 85, 86].includes(code)) return 4;
-    return 5;
-  },
+  _dayPhaseOffset: 0,
 
   describe(code) {
     const map = {
@@ -34,6 +25,8 @@ export const WeatherEngine = {
       1: "Mostly Clear",
       2: "Partly Cloudy",
       3: "Cloudy",
+      45: "Fog",
+      48: "Fog",
       51: "Light Drizzle",
       53: "Drizzle",
       55: "Heavy Drizzle",
@@ -55,7 +48,7 @@ export const WeatherEngine = {
     return map[code] || "Unknown";
   },
 
-  _hashString(str) {
+  _hash(str) {
     let h = 0;
     for (let i = 0; i < str.length; i++) {
       h = (h * 31 + str.charCodeAt(i)) >>> 0;
@@ -75,16 +68,16 @@ export const WeatherEngine = {
     return { low: 0.5, high: 0.3 };
   },
 
-  _cloudSpeedFor(code) {
-    if ([0].includes(code)) return 0.3;
+  _cloudSpeed(code) {
+    if (code === 0) return 0.3;
     if ([1, 2, 3].includes(code)) return 0.6;
     if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return 1.0;
     if ([95, 96, 99].includes(code)) return 1.5;
-    if ([71, 73, 75, 77, 85, 86].includes(code)) return 0.7;
+    if ([71, 73, 75, 85, 86].includes(code)) return 0.7;
     return 0.4;
   },
 
-  _sunBaseFor(mode) {
+  _sunBase(mode) {
     if (mode === 0) return 1.0;
     if (mode === 1) return 0.8;
     if (mode === 2) return 0.45;
@@ -94,11 +87,11 @@ export const WeatherEngine = {
     return 0.7;
   },
 
-  _lightningBaseFor(mode) {
+  _lightning(mode) {
     return mode === 3 ? 1.0 : 0.0;
   },
 
-  _fogFor(mode) {
+  _fog(mode) {
     if (mode === 2) return 0.16;
     if (mode === 3) return 0.26;
     if (mode === 4) return 0.22;
@@ -106,45 +99,54 @@ export const WeatherEngine = {
     return 0.03;
   },
 
-  _windFor(code) {
-    const baseAngle =
-      (this._hashString(this.city + ":" + code) % 360) * (Math.PI / 180);
+  _wind(code) {
+    const angle =
+      (this._hash(this.city + ":" + code) % 360) * (Math.PI / 180);
 
     let strength = 0.3;
     if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) strength = 0.7;
     if ([95, 96, 99].includes(code)) strength = 1.0;
-    if ([71, 73, 75, 77, 85, 86].includes(code)) strength = 0.5;
+    if ([71, 73, 75, 85, 86].includes(code)) strength = 0.5;
 
     return {
-      x: Math.cos(baseAngle) * strength,
-      y: Math.sin(baseAngle) * strength
+      x: Math.cos(angle) * strength,
+      y: Math.sin(angle) * strength
     };
   },
 
   setFromAPI(city, code) {
-    this.city = city || "Unknown";
+    this.city = city;
     this.code = code;
 
-    const targetMode = this.map(code);
-    const seedHash = this._hashString(this.city + ":" + code);
+    const mode = this._mapToMode(code);
+    const seed = this._hash(city + ":" + code);
 
-    this._dayPhaseOffset = (seedHash % 86400) / 86400;
+    this._dayPhaseOffset = (seed % 86400) / 86400;
 
-    const preset = this._cloudPreset(targetMode);
+    const preset = this._cloudPreset(mode);
 
     this._target = {
-      mode: targetMode,
-      seed: (seedHash % 10000) / 10,
+      mode,
+      seed: (seed % 10000) / 10,
       cloudLow: preset.low,
       cloudHigh: preset.high,
-      cloudSpeed: this._cloudSpeedFor(code),
-      sunBase: this._sunBaseFor(targetMode),
-      lightningBase: this._lightningBaseFor(targetMode),
-      fogDensity: this._fogFor(targetMode),
-      windDir: this._windFor(code)
+      cloudSpeed: this._cloudSpeed(code),
+      sunBase: this._sunBase(mode),
+      lightningBase: this._lightning(mode),
+      fogDensity: this._fog(mode),
+      windDir: this._wind(code)
     };
 
     this._transitionStart = performance.now() / 1000;
+  },
+
+  _mapToMode(code) {
+    if (code === 0) return 0;
+    if ([1, 2, 3].includes(code)) return 1;
+    if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return 2;
+    if ([95, 96, 99].includes(code)) return 3;
+    if ([71, 73, 75, 85, 86].includes(code)) return 4;
+    return 5;
   },
 
   _lerp(a, b, t) {
@@ -158,10 +160,10 @@ export const WeatherEngine = {
     };
   },
 
-  update(timeSeconds) {
+  update(time) {
     if (this._target) {
-      const elapsed = timeSeconds - this._transitionStart;
-      const tRaw = Math.min(elapsed / this._transitionDuration, 1.0);
+      const elapsed = time - this._transitionStart;
+      const tRaw = Math.min(elapsed / this._transitionDuration, 1);
       const t = tRaw * tRaw * (3 - 2 * tRaw);
 
       if (t >= 0.5) this.mode = this._target.mode;
@@ -179,20 +181,20 @@ export const WeatherEngine = {
       this.fogDensity = this._lerp(this.fogDensity, this._target.fogDensity, t);
       this.windDir = this._lerpVec(this.windDir, this._target.windDir, t);
 
-      if (tRaw >= 1.0) this._target = null;
+      if (tRaw >= 1) this._target = null;
     }
 
-    let lightning = 0.0;
+    let lightning = 0;
     if (this.mode === 3) {
-      const f = Math.sin(timeSeconds * 5.7 + this.seed * 0.13);
-      const g = Math.sin(timeSeconds * 9.1 + this.seed * 0.37);
+      const f = Math.sin(time * 5.7 + this.seed * 0.13);
+      const g = Math.sin(time * 9.1 + this.seed * 0.37);
       const pulse = Math.max(f, g);
-      lightning = pulse > 0.92 ? this.lightningBase : 0.0;
+      lightning = pulse > 0.92 ? this.lightningBase : 0;
     }
 
-    const secondsInDay = 24 * 3600;
+    const secondsInDay = 86400;
     const dayPhase =
-      ((timeSeconds / secondsInDay) + this._dayPhaseOffset) % 1.0;
+      ((time / secondsInDay) + this._dayPhaseOffset) % 1;
 
     const sunIntensity =
       this.sunBase * (0.4 + 0.6 * Math.sin(dayPhase * Math.PI));

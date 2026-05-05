@@ -4,7 +4,6 @@ body {
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
   background: #000;
-  overflow-y: auto;
   overflow-x: hidden;
   color: #fff;
 }
@@ -13,18 +12,19 @@ html, body {
   height: 100%;
 }
 
+/* SKY CANVAS (ONLY THING THAT FADES) */
 #sky {
   position: fixed;
   inset: 0;
   z-index: -1;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.30s ease;
 }
 
 #sky.fade-out {
   opacity: 0;
 }
 
-/* Weather box */
+/* WEATHER BOX */
 .weather-box {
   position: relative;
   width: 480px;
@@ -35,15 +35,6 @@ html, body {
   background: rgba(10, 10, 15, 0.82);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.8);
   color: #f8f9ff;
-}
-
-/* Weather content fade */
-.weather-content {
-  transition: opacity 0.35s ease;
-}
-
-.weather-content.fade-out {
-  opacity: 0;
 }
 
 /* SEARCH BAR */
@@ -86,13 +77,8 @@ html, body {
   background: rgba(255,255,255,0.18);
 }
 
-#detectLocation {
-  right: 52px;
-}
-
-#voiceSearch {
-  right: 10px;
-}
+#detectLocation { right: 52px; }
+#voiceSearch { right: 10px; }
 
 .icon {
   width: 20px;
@@ -141,7 +127,7 @@ html, body {
   opacity: 0.8;
 }
 
-/* Moon phase */
+/* Moon */
 .moon-phase {
   display: flex;
   align-items: center;
@@ -202,7 +188,7 @@ html, body {
   padding-bottom: 6px;
 }
 
-/* Collapsible 24h */
+/* Collapsible */
 .collapsible {
   display: flex;
   justify-content: space-between;
@@ -225,7 +211,7 @@ html, body {
   transform: rotate(180deg);
 }
 
-/* 24-hour forecast */
+/* Hourly forecast */
 #forecast {
   margin-top: 10px;
   overflow: hidden;
@@ -246,7 +232,7 @@ html, body {
   align-items: center;
 }
 
-/* 7-day forecast */
+/* Daily forecast */
 #dailyForecast {
   margin-top: 10px;
 }
@@ -275,7 +261,7 @@ html, body {
   border: none;
 }
 
-/* Weather icon container */
+/* Weather icon */
 .weather-icon {
   width: 64px;
   height: 64px;

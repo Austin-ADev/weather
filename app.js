@@ -2,7 +2,7 @@
 import { Sky } from "./sky/sky.js";
 import { WeatherEngine } from "./sky/weatherEngine.js";
 
-// Debug helper
+// ---------- Debug logger ----------
 const log = {
   app: (...msg) => console.log("%c[APP]", "color:#4af", ...msg),
   sky: (...msg) => console.log("%c[SKY]", "color:#6f6", ...msg),
@@ -13,9 +13,8 @@ const log = {
   fade: (...msg) => console.log("%c[FADE]", "color:#ccc", ...msg)
 };
 
-// DOM references
+// ---------- DOM refs ----------
 const skyCanvas = document.getElementById("sky");
-const weatherContent = document.getElementById("weatherContent");
 
 const cityNameEl = document.getElementById("cityName");
 const localtimeEl = document.getElementById("localtime");
@@ -35,7 +34,7 @@ const searchInput = document.getElementById("citySearch");
 const searchResults = document.getElementById("searchResults");
 const detectLocationBtn = document.getElementById("detectLocation");
 
-// WebGL
+// ---------- WebGL + GPU tier detection ----------
 log.app("Initializing WebGL…");
 const gl = skyCanvas.getContext("webgl", { antialias: true });
 
@@ -57,37 +56,58 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-// Shader tiers
-const shaderSets = [
-  { tier: 1, vert: "shaders/vert.glsl", frag: "shaders/perf.frag" },
-  { tier: 2, vert: "shaders/vert.glsl", frag: "shaders/high.frag" },
-  { tier: 3, vert: "shaders/vert.glsl", frag: "shaders/ultraB.frag" },
-  { tier: 4, vert: "shaders/vert.glsl", frag: "shaders/ultraC.frag" }
-];
+function detectTier() {
+  const testCanvas = document.createElement("canvas");
+  const testGl = testCanvas.getContext("webgl");
+  if (!testGl) {
+    log.app("No WebGL context for GPU detection, defaulting to LOW tier.");
+    return "low";
+  }
 
-log.sky("Shader sets:", shaderSets);
+  const ext = testGl.getExtension("WEBGL_debug_renderer_info");
+  let renderer = "unknown";
+  if (ext) {
+    renderer = testGl
+      .getParameter(ext.UNMASKED_RENDERER_WEBGL)
+      .toLowerCase();
+  }
 
-// Fade helpers
-function fadeOutWeather() {
-  log.fade("Fading OUT weather + sky…");
-  weatherContent.classList.add("fade-out");
+  log.app("GPU renderer:", renderer);
+
+  const dedicatedKeywords = [
+    "nvidia", "geforce", "rtx", "gtx",
+    "radeon", "rx", "arc", "quadro",
+    "m1 pro", "m1 max", "m2 pro", "m2 max"
+  ];
+
+  const isDedicated = dedicatedKeywords.some(k => renderer.includes(k));
+  const tier = isDedicated ? "high" : "low";
+
+  log.app("Selected tier:", tier, "(dedicated:", isDedicated, ")");
+  return tier;
+}
+
+const gpuTier = detectTier(); // "high" (realistic) or "low" (stylized)
+
+// ---------- Fade helpers (only sky) ----------
+function fadeOutSky() {
+  log.fade("Fading OUT sky…");
   skyCanvas.classList.add("fade-out");
 }
 
-function fadeInWeather() {
-  log.fade("Fading IN weather + sky…");
-  weatherContent.classList.remove("fade-out");
+function fadeInSky() {
+  log.fade("Fading IN sky…");
   skyCanvas.classList.remove("fade-out");
 }
 
-// Radar
+// ---------- Radar ----------
 function setRadar(lat, lon) {
   const url = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&level=surface&overlay=radar`;
   radarFrame.src = url;
   log.radar("Radar updated:", url);
 }
 
-// Time formatting
+// ---------- Time + moon ----------
 function formatTime(dateStr, timezone) {
   try {
     const d = new Date(dateStr);
@@ -101,7 +121,20 @@ function formatTime(dateStr, timezone) {
   }
 }
 
-// Moon phase
+function getLocalHour(dateStr, timezone) {
+  try {
+    const d = new Date(dateStr);
+    const hourStr = d.toLocaleString("en-US", {
+      hour: "2-digit",
+      hour12: false,
+      timeZone: timezone
+    });
+    return parseInt(hourStr, 10);
+  } catch {
+    return 12;
+  }
+}
+
 function moonPhaseLabel(phase) {
   if (phase < 0.03 || phase > 0.97) return "New Moon";
   if (phase < 0.22) return "Waxing Crescent";
@@ -113,7 +146,40 @@ function moonPhaseLabel(phase) {
   return "Waning Crescent";
 }
 
-// Build hourly forecast
+// ---------- Weather → shader mapping ----------
+function mapWeatherType(code, isNight) {
+  // Open-Meteo codes → our shader keys
+  if (isNight) {
+    if ([95, 96, 99].includes(code)) return "nightStorm";
+    if ([2, 3].includes(code)) return "nightCloudy";
+    return "night";
+  }
+
+  if (code === 0) return "sunny";
+  if (code === 1) return "mostlyClear";
+  if (code === 2) return "partlyCloudy";
+  if (code === 3) return "cloudy";
+
+  if ([45, 48].includes(code)) return "fog";
+
+  if ([51, 53, 55, 56, 57].includes(code)) return "drizzle";
+
+  if ([61, 63, 66].includes(code)) return "rain";
+  if ([65, 67].includes(code)) return "heavyRain";
+
+  if ([80, 81, 82].includes(code)) return "showers";
+
+  if ([71, 73, 77].includes(code)) return "snow";
+  if ([75].includes(code)) return "heavySnow";
+
+  if ([85, 86].includes(code)) return "snowShowers";
+
+  if ([95, 96, 99].includes(code)) return "storm";
+
+  return isNight ? "night" : "cloudy";
+}
+
+// ---------- Forecast builders ----------
 function buildHourly(hourly, timezone) {
   log.weather("Building hourly forecast…");
   forecastEl.innerHTML = "";
@@ -137,7 +203,6 @@ function buildHourly(hourly, timezone) {
   }
 }
 
-// Build daily forecast
 function buildDaily(daily) {
   log.weather("Building daily forecast…");
   dailyForecastEl.innerHTML = "";
@@ -167,9 +232,15 @@ function buildDaily(daily) {
   }
 }
 
-// API fetch
+// ---------- API ----------
 async function fetchWeather(lat, lon) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase&timezone=auto`;
+  const url =
+    `https://api.open-meteo.com/v1/forecast` +
+    `?latitude=${lat}&longitude=${lon}` +
+    `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m` +
+    `&hourly=temperature_2m,weather_code` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase` +
+    `&timezone=auto`;
 
   log.fetch("Fetching weather:", url);
 
@@ -184,7 +255,6 @@ async function fetchWeather(lat, lon) {
   return json;
 }
 
-// Geocoding
 async function geocodeCity(name) {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
     name
@@ -200,7 +270,7 @@ async function geocodeCity(name) {
   return json;
 }
 
-// Search results
+// ---------- Search UI ----------
 function showSearchResults(results) {
   searchResults.innerHTML = "";
   if (!results || !results.results || results.results.length === 0) {
@@ -230,49 +300,6 @@ function showSearchResults(results) {
   searchResults.style.display = "block";
 }
 
-// Set location from coordinates
-async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
-  log.app("Setting location:", label, lat, lon);
-
-  fadeOutWeather();
-
-  setTimeout(async () => {
-    try {
-      const data = await fetchWeather(lat, lon);
-      const current = data.current;
-      const daily = data.daily;
-      const hourly = data.hourly;
-      const timezone = data.timezone || timezoneOverride || "UTC";
-
-      const code = current.weather_code;
-      log.weather("Applying weather code:", code, WeatherEngine.describe(code));
-
-      WeatherEngine.setFromAPI(label, code);
-
-      cityNameEl.textContent = label;
-      localtimeEl.textContent = formatTime(current.time, timezone);
-      tempEl.textContent = `${Math.round(current.temperature_2m)}°F`;
-      conditionEl.textContent = WeatherEngine.describe(code);
-      humidityEl.textContent = `${Math.round(current.relative_humidity_2m)}%`;
-      windEl.textContent = `${Math.round(current.wind_speed_10m)} mph`;
-      feelsEl.textContent = `${Math.round(current.apparent_temperature)}°F`;
-
-      const moonPhase = daily.moon_phase[0];
-      moonLabelEl.textContent = moonPhaseLabel(moonPhase);
-
-      buildHourly(hourly, timezone);
-      buildDaily(daily);
-      setRadar(lat, lon);
-
-    } catch (e) {
-      log.app("ERROR setting location:", e);
-    } finally {
-      fadeInWeather();
-    }
-  }, 350);
-}
-
-// Set location by name
 async function setLocationByName(name) {
   log.search("Searching for:", name);
 
@@ -294,7 +321,6 @@ async function setLocationByName(name) {
   }
 }
 
-// Search input
 function initSearch() {
   let searchTimeout = null;
 
@@ -320,7 +346,57 @@ function initSearch() {
   });
 }
 
-// Collapsible hourly forecast
+// ---------- Location + weather application ----------
+async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
+  log.app("Setting location:", label, lat, lon);
+
+  fadeOutSky();
+
+  setTimeout(async () => {
+    try {
+      const data = await fetchWeather(lat, lon);
+      const current = data.current;
+      const daily = data.daily;
+      const hourly = data.hourly;
+      const timezone = data.timezone || timezoneOverride || "UTC";
+
+      const code = current.weather_code;
+      const hour = getLocalHour(current.time, timezone);
+      const isNight = hour < 6 || hour >= 20;
+      const weatherType = mapWeatherType(code, isNight);
+
+      log.weather("Weather code:", code, "→ type:", weatherType, "night:", isNight);
+
+      WeatherEngine.setFromAPI(label, code);
+
+      cityNameEl.textContent = label;
+      localtimeEl.textContent = formatTime(current.time, timezone);
+      tempEl.textContent = `${Math.round(current.temperature_2m)}°F`;
+      conditionEl.textContent = WeatherEngine.describe(code);
+      humidityEl.textContent = `${Math.round(current.relative_humidity_2m)}%`;
+      windEl.textContent = `${Math.round(current.wind_speed_10m)} mph`;
+      feelsEl.textContent = `${Math.round(current.apparent_temperature)}°F`;
+
+      const moonPhase = daily.moon_phase[0];
+      moonLabelEl.textContent = moonPhaseLabel(moonPhase);
+
+      buildHourly(hourly, timezone);
+      buildDaily(daily);
+      setRadar(lat, lon);
+
+      // Tell Sky to switch to the correct weather shader for this GPU tier
+      log.sky("Switching shader to:", weatherType, "tier:", gpuTier);
+      await Sky.setWeatherShader(weatherType, gpuTier);
+
+    } catch (e) {
+      log.app("ERROR setting location:", e);
+    } finally {
+      fadeInSky();
+    }
+  }, 250);
+}
+
+// ---------- Hourly toggle ----------
 function initHourlyToggle() {
   if (!hourlyToggle || !forecastEl) return;
 
@@ -331,7 +407,7 @@ function initHourlyToggle() {
   });
 }
 
-// Detect location
+// ---------- Geolocation ----------
 function initDetectLocation() {
   if (!detectLocationBtn) return;
 
@@ -356,16 +432,15 @@ function initDetectLocation() {
   });
 }
 
-// MAIN
+// ---------- MAIN ----------
 (async () => {
-  log.app("Initializing SkyEngine…");
-  await Sky.init(gl, shaderSets);
+  log.app("Initializing Sky with tier:", gpuTier);
+  await Sky.init(gl, gpuTier); // Sky will use tier to pick high/low shaders
 
   initSearch();
   initHourlyToggle();
   initDetectLocation();
 
-  // Default location
   log.app("Loading default location: Indianapolis");
   setLocationByName("Indianapolis");
 
@@ -383,7 +458,6 @@ function initDetectLocation() {
     }
 
     Sky.update();
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(frame);
   }
 

@@ -7,7 +7,7 @@ async function loadText(url) {
   return r.text();
 }
 
-async function loadShaderProgram(gl, vertURL, fragURL) {
+async function compileProgram(gl, vertURL, fragURL) {
   const vertSrc = await loadText(vertURL);
   const fragSrc = await loadText(fragURL);
 
@@ -16,7 +16,7 @@ async function loadShaderProgram(gl, vertURL, fragURL) {
     gl.shaderSource(s, src);
     gl.compileShader(s);
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-      console.error("[Shader]", gl.getShaderInfoLog(s));
+      console.error("[SKY] Shader compile error:", gl.getShaderInfoLog(s));
       gl.deleteShader(s);
       return null;
     }
@@ -36,10 +36,11 @@ async function loadShaderProgram(gl, vertURL, fragURL) {
   gl.deleteShader(fs);
 
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    console.error("[Program]", gl.getProgramInfoLog(prog));
+    console.error("[SKY] Program link error:", gl.getProgramInfoLog(prog));
     gl.deleteProgram(prog);
     return null;
   }
+
   return prog;
 }
 
@@ -47,18 +48,19 @@ export const Sky = {
   gl: null,
   program: null,
   uniforms: {},
-  shaderSets: null,
-  tier: 1,
-  timeStart: performance.now(),
+  tier: "low",
+  weatherType: "sunny",
   _programCache: new Map(),
   _quadBuffer: null,
+  timeStart: performance.now(),
 
-  async init(gl, shaderSets, initialTier = 1) {
+  async init(gl, tier) {
     this.gl = gl;
-    this.shaderSets = shaderSets;
-    this.tier = initialTier;
+    this.tier = tier;
 
-    // fullscreen quad
+    console.log("[SKY] Init with tier:", tier);
+
+    // Fullscreen quad
     this._quadBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._quadBuffer);
     gl.bufferData(
@@ -70,43 +72,41 @@ export const Sky = {
       gl.STATIC_DRAW
     );
 
-    this.program = await this._loadTierProgram(this.tier);
-    this._useProgramAndBind();
+    // Load default shader
+    await this.setWeatherShader("sunny", this.tier);
   },
 
-  async _loadTierProgram(tier) {
-    if (this._programCache.has(tier)) {
-      return this._programCache.get(tier);
+  async setWeatherShader(weatherType, tier) {
+    this.weatherType = weatherType;
+    this.tier = tier;
+
+    const vert = "shaders/vert.glsl";
+    const frag = `shaders/${weatherType}/${tier}.frag`;
+    const key = `${weatherType}_${tier}`;
+
+    console.log("[SKY] Loading shader:", frag);
+
+    // Cache programs
+    if (!this._programCache.has(key)) {
+      const prog = await compileProgram(this.gl, vert, frag);
+      if (!prog) throw new Error("Shader compile failed: " + frag);
+      this._programCache.set(key, prog);
     }
 
-    const gl = this.gl;
-    let chosen = null;
-
-    for (const s of this.shaderSets) {
-      if (s.tier <= tier) {
-        if (!chosen || s.tier > chosen.tier) chosen = s;
-      }
-    }
-
-    if (!chosen) throw new Error("No shader for tier " + tier);
-
-    const prog = await loadShaderProgram(gl, chosen.vert, chosen.frag);
-    if (!prog) throw new Error("Failed to compile shader for tier " + tier);
-
-    this._programCache.set(tier, prog);
-    return prog;
+    this.program = this._programCache.get(key);
+    this._bindProgram();
   },
 
-  _useProgramAndBind() {
+  _bindProgram() {
     const gl = this.gl;
     gl.useProgram(this.program);
 
     const u = n => gl.getUniformLocation(this.program, n);
+
     this.uniforms = {
       uTime:        u("uTime"),
       uResolution:  u("uResolution"),
       uMode:        u("uMode"),
-      uQuality:     u("uQuality"),
       uSeed:        u("uSeed"),
       uCloudLow:    u("uCloudLow"),
       uCloudHigh:   u("uCloudHigh"),
@@ -118,23 +118,10 @@ export const Sky = {
       uDayPhase:    u("uDayPhase")
     };
 
-    if (this.uniforms.uQuality) {
-      gl.uniform1i(this.uniforms.uQuality, this.tier);
-    }
-
     gl.bindBuffer(gl.ARRAY_BUFFER, this._quadBuffer);
     const aPos = gl.getAttribLocation(this.program, "aPos");
-    if (aPos !== -1) {
-      gl.enableVertexAttribArray(aPos);
-      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-    }
-  },
-
-  async switchTier(tier) {
-    if (tier === this.tier) return;
-    this.tier = tier;
-    this.program = await this._loadTierProgram(this.tier);
-    this._useProgramAndBind();
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
   },
 
   update() {
@@ -143,7 +130,6 @@ export const Sky = {
 
     const t = (performance.now() - this.timeStart) / 1000;
     const state = WeatherEngine.update(t);
-    if (!state) return;
 
     const dpr = window.devicePixelRatio || 1;
     const w = gl.canvas.clientWidth * dpr;
@@ -157,6 +143,7 @@ export const Sky = {
 
     gl.uniform1f(this.uniforms.uTime, t);
     gl.uniform2f(this.uniforms.uResolution, w, h);
+
     gl.uniform1i(this.uniforms.uMode, state.mode);
     gl.uniform1f(this.uniforms.uSeed, state.seed);
     gl.uniform1f(this.uniforms.uCloudLow, state.cloudLow);
