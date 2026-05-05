@@ -44,14 +44,6 @@ function resizeCanvas() {
   skyCanvas.width = rect.width * dpr;
   skyCanvas.height = rect.height * dpr;
   gl.viewport(0, 0, skyCanvas.width, skyCanvas.height);
-
-  log.sky("Canvas resized:", {
-    cssWidth: rect.width,
-    cssHeight: rect.height,
-    pixelWidth: skyCanvas.width,
-    pixelHeight: skyCanvas.height,
-    dpr
-  });
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
@@ -59,20 +51,13 @@ resizeCanvas();
 function detectTier() {
   const testCanvas = document.createElement("canvas");
   const testGl = testCanvas.getContext("webgl");
-  if (!testGl) {
-    log.app("No WebGL context for GPU detection, defaulting to LOW tier.");
-    return "low";
-  }
+  if (!testGl) return "low";
 
   const ext = testGl.getExtension("WEBGL_debug_renderer_info");
   let renderer = "unknown";
   if (ext) {
-    renderer = testGl
-      .getParameter(ext.UNMASKED_RENDERER_WEBGL)
-      .toLowerCase();
+    renderer = testGl.getParameter(ext.UNMASKED_RENDERER_WEBGL).toLowerCase();
   }
-
-  log.app("GPU renderer:", renderer);
 
   const dedicatedKeywords = [
     "nvidia", "geforce", "rtx", "gtx",
@@ -81,22 +66,17 @@ function detectTier() {
   ];
 
   const isDedicated = dedicatedKeywords.some(k => renderer.includes(k));
-  const tier = isDedicated ? "high" : "low";
-
-  log.app("Selected tier:", tier, "(dedicated:", isDedicated, ")");
-  return tier;
+  return isDedicated ? "high" : "low";
 }
 
-const gpuTier = detectTier(); // "high" (realistic) or "low" (stylized)
+const gpuTier = detectTier();
+log.app("GPU Tier:", gpuTier);
 
-// ---------- Fade helpers (only sky) ----------
+// ---------- Fade helpers ----------
 function fadeOutSky() {
-  log.fade("Fading OUT sky…");
   skyCanvas.classList.add("fade-out");
 }
-
 function fadeInSky() {
-  log.fade("Fading IN sky…");
   skyCanvas.classList.remove("fade-out");
 }
 
@@ -104,10 +84,9 @@ function fadeInSky() {
 function setRadar(lat, lon) {
   const url = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&level=surface&overlay=radar`;
   radarFrame.src = url;
-  log.radar("Radar updated:", url);
 }
 
-// ---------- Time + moon ----------
+// ---------- Time helpers ----------
 function formatTime(dateStr, timezone) {
   try {
     const d = new Date(dateStr);
@@ -148,7 +127,6 @@ function moonPhaseLabel(phase) {
 
 // ---------- Weather → shader mapping ----------
 function mapWeatherType(code, isNight) {
-  // Open-Meteo codes → our shader keys
   if (isNight) {
     if ([95, 96, 99].includes(code)) return "nightStorm";
     if ([2, 3].includes(code)) return "nightCloudy";
@@ -181,7 +159,6 @@ function mapWeatherType(code, isNight) {
 
 // ---------- Forecast builders ----------
 function buildHourly(hourly, timezone) {
-  log.weather("Building hourly forecast…");
   forecastEl.innerHTML = "";
   const hours = hourly.time.slice(0, 24);
 
@@ -204,7 +181,6 @@ function buildHourly(hourly, timezone) {
 }
 
 function buildDaily(daily) {
-  log.weather("Building daily forecast…");
   dailyForecastEl.innerHTML = "";
   const days = daily.time;
 
@@ -260,14 +236,10 @@ async function geocodeCity(name) {
     name
   )}&count=5&language=en&format=json`;
 
-  log.search("Geocoding:", url);
-
   const res = await fetch(url);
   if (!res.ok) throw new Error("Geocode failed");
 
-  const json = await res.json();
-  log.search("Geocode results:", json);
-  return json;
+  return res.json();
 }
 
 // ---------- Search UI ----------
@@ -278,8 +250,6 @@ function showSearchResults(results) {
     return;
   }
 
-  log.search("Showing search results:", results.results.length);
-
   results.results.forEach(r => {
     const item = document.createElement("div");
     item.className = "search-item";
@@ -288,7 +258,6 @@ function showSearchResults(results) {
     item.textContent = label;
 
     item.addEventListener("click", () => {
-      log.search("Selected:", label);
       searchResults.style.display = "none";
       searchInput.value = label;
       setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
@@ -301,19 +270,12 @@ function showSearchResults(results) {
 }
 
 async function setLocationByName(name) {
-  log.search("Searching for:", name);
-
   try {
     const geo = await geocodeCity(name);
-    if (!geo.results || geo.results.length === 0) {
-      log.search("No results for:", name);
-      return;
-    }
+    if (!geo.results || geo.results.length === 0) return;
 
     const r = geo.results[0];
     const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
-
-    log.search("Resolved to:", label);
 
     await setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
   } catch (e) {
@@ -326,7 +288,6 @@ function initSearch() {
 
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim();
-    log.search("Input:", q);
 
     if (searchTimeout) clearTimeout(searchTimeout);
 
@@ -348,8 +309,6 @@ function initSearch() {
 
 // ---------- Location + weather application ----------
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
-  log.app("Setting location:", label, lat, lon);
-
   fadeOutSky();
 
   setTimeout(async () => {
@@ -364,8 +323,6 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       const hour = getLocalHour(current.time, timezone);
       const isNight = hour < 6 || hour >= 20;
       const weatherType = mapWeatherType(code, isNight);
-
-      log.weather("Weather code:", code, "→ type:", weatherType, "night:", isNight);
 
       WeatherEngine.setFromAPI(label, code);
 
@@ -384,8 +341,6 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       buildDaily(daily);
       setRadar(lat, lon);
 
-      // Tell Sky to switch to the correct weather shader for this GPU tier
-      log.sky("Switching shader to:", weatherType, "tier:", gpuTier);
       await Sky.setWeatherShader(weatherType, gpuTier);
 
     } catch (e) {
@@ -398,31 +353,20 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
 
 // ---------- Hourly toggle ----------
 function initHourlyToggle() {
-  if (!hourlyToggle || !forecastEl) return;
-
   hourlyToggle.addEventListener("click", () => {
     const isOpen = forecastEl.classList.toggle("open");
     hourlyToggle.classList.toggle("open", isOpen);
-    log.app("Toggled hourly forecast:", isOpen);
   });
 }
 
 // ---------- Geolocation ----------
 function initDetectLocation() {
-  if (!detectLocationBtn) return;
-
   detectLocationBtn.addEventListener("click", () => {
-    log.app("Detecting location…");
-
-    if (!navigator.geolocation) {
-      log.app("Geolocation not supported");
-      return;
-    }
+    if (!navigator.geolocation) return;
 
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude, longitude } = pos.coords;
-        log.app("Location detected:", latitude, longitude);
         setLocationFromCoords("My Location", latitude, longitude);
       },
       err => {
@@ -434,29 +378,15 @@ function initDetectLocation() {
 
 // ---------- MAIN ----------
 (async () => {
-  log.app("Initializing Sky with tier:", gpuTier);
-  await Sky.init(gl, gpuTier); // Sky will use tier to pick high/low shaders
+  await Sky.init(gl, gpuTier);
 
   initSearch();
   initHourlyToggle();
   initDetectLocation();
 
-  log.app("Loading default location: Indianapolis");
   setLocationByName("Indianapolis");
 
-  let frameCount = 0;
-  let lastTime = performance.now();
-
   function frame() {
-    frameCount++;
-
-    const now = performance.now();
-    if (now - lastTime >= 1000) {
-      log.sky("FPS:", frameCount);
-      frameCount = 0;
-      lastTime = now;
-    }
-
     Sky.update();
     requestAnimationFrame(frame);
   }
