@@ -74,14 +74,17 @@ log.app("GPU Tier:", gpuTier);
 
 // ---------- Fade helpers ----------
 function fadeOutSky() {
+  log.fade("Fading OUT sky");
   skyCanvas.classList.add("fade-out");
 }
 function fadeInSky() {
+  log.fade("Fading IN sky");
   skyCanvas.classList.remove("fade-out");
 }
 
 // ---------- Radar ----------
 function setRadar(lat, lon) {
+  log.radar("Setting radar with:", { lat, lon });
   const url = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&level=surface&overlay=radar`;
   radarFrame.src = url;
 }
@@ -159,6 +162,7 @@ function mapWeatherType(code, isNight) {
 
 // ---------- Forecast builders ----------
 function buildHourly(hourly, timezone) {
+  log.weather("Building hourly forecast");
   forecastEl.innerHTML = "";
   const hours = hourly.time.slice(0, 24);
 
@@ -181,6 +185,7 @@ function buildHourly(hourly, timezone) {
 }
 
 function buildDaily(daily) {
+  log.weather("Building daily forecast");
   dailyForecastEl.innerHTML = "";
   const days = daily.time;
 
@@ -210,20 +215,29 @@ function buildDaily(daily) {
 
 // ---------- API ----------
 async function fetchWeather(lat, lon) {
-  const url =
-  `https://api.open-meteo.com/v1/forecast` +
-  `?latitude=${lat}&longitude=${lon}` +
-  `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m` +
-  `&hourly=temperature_2m,weather_code` +
-  `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase` +
-  `&timezone=auto`;
+  log.fetch("fetchWeather() called with:", { lat, lon });
 
+  if (typeof lat !== "number" || typeof lon !== "number") {
+    log.fetch("❌ ERROR: lat/lon are not numbers!", { lat, lon });
+  }
 
-  log.fetch("Fetching weather:", url);
+  const base = `https://api.open-meteo.com/v1/forecast`;
+  const q1 = `?latitude=${lat}`;
+  const q2 = `&longitude=${lon}`;
+  const q3 = `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m`;
+  const q4 = `&hourly=temperature_2m,weather_code`;
+  const q5 = `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase`;
+  const q6 = `&timezone=auto`;
+
+  log.fetch("URL parts:", { base, q1, q2, q3, q4, q5, q6 });
+
+  const url = base + q1 + q2 + q3 + q4 + q5 + q6;
+
+  log.fetch("FINAL FETCH URL:", url);
 
   const res = await fetch(url);
   if (!res.ok) {
-    log.fetch("Weather fetch FAILED:", res.status);
+    log.fetch("❌ Weather fetch FAILED:", res.status, url);
     throw new Error("Weather fetch failed");
   }
 
@@ -233,18 +247,30 @@ async function fetchWeather(lat, lon) {
 }
 
 async function geocodeCity(name) {
+  log.search("geocodeCity() called with:", name);
+
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
     name
   )}&count=5&language=en&format=json`;
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Geocode failed");
+  log.search("Geocode URL:", url);
 
-  return res.json();
+  const res = await fetch(url);
+  if (!res.ok) {
+    log.search("❌ Geocode FAILED:", res.status);
+    throw new Error("Geocode failed");
+  }
+
+  const json = await res.json();
+  log.search("Geocode result:", json);
+
+  return json;
 }
 
 // ---------- Search UI ----------
 function showSearchResults(results) {
+  log.search("showSearchResults() called with:", results);
+
   searchResults.innerHTML = "";
   if (!results || !results.results || results.results.length === 0) {
     searchResults.style.display = "none";
@@ -259,6 +285,7 @@ function showSearchResults(results) {
     item.textContent = label;
 
     item.addEventListener("click", () => {
+      log.search("Search item clicked:", r);
       searchResults.style.display = "none";
       searchInput.value = label;
       setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
@@ -271,16 +298,33 @@ function showSearchResults(results) {
 }
 
 async function setLocationByName(name) {
+  log.search("setLocationByName() called with:", name);
+
   try {
     const geo = await geocodeCity(name);
-    if (!geo.results || geo.results.length === 0) return;
+    log.search("geocodeCity() returned:", geo);
+
+    if (!geo.results || geo.results.length === 0) {
+      log.search("❌ No geocode results");
+      return;
+    }
 
     const r = geo.results[0];
+    log.search("Using geocode result:", r);
+
     const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
 
+    log.search("Calling setLocationFromCoords with:", {
+      label,
+      lat: r.latitude,
+      lon: r.longitude,
+      timezone: r.timezone
+    });
+
     await setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
+
   } catch (e) {
-    log.search("Search error:", e);
+    log.search("❌ ERROR in setLocationByName:", e);
   }
 }
 
@@ -289,6 +333,7 @@ function initSearch() {
 
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim();
+    log.search("Search input:", q);
 
     if (searchTimeout) clearTimeout(searchTimeout);
 
@@ -310,20 +355,30 @@ function initSearch() {
 
 // ---------- Location + weather application ----------
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
+  log.app("setLocationFromCoords() called with:", { label, lat, lon, timezoneOverride });
+
   fadeOutSky();
 
   setTimeout(async () => {
     try {
+      log.app("Calling fetchWeather() with:", { lat, lon });
       const data = await fetchWeather(lat, lon);
+
+      log.app("fetchWeather() returned:", data);
+
       const current = data.current;
       const daily = data.daily;
       const hourly = data.hourly;
       const timezone = data.timezone || timezoneOverride || "UTC";
 
+      log.app("Parsed weather data:", { current, daily, hourly, timezone });
+
       const code = current.weather_code;
       const hour = getLocalHour(current.time, timezone);
       const isNight = hour < 6 || hour >= 20;
       const weatherType = mapWeatherType(code, isNight);
+
+      log.app("Weather type resolved:", { code, hour, isNight, weatherType });
 
       WeatherEngine.setFromAPI(label, code);
 
@@ -342,10 +397,11 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       buildDaily(daily);
       setRadar(lat, lon);
 
+      log.sky("Setting shader:", weatherType, "GPU tier:", gpuTier);
       await Sky.setWeatherShader(weatherType, gpuTier);
 
     } catch (e) {
-      log.app("ERROR setting location:", e);
+      log.app("❌ ERROR in setLocationFromCoords:", e);
     } finally {
       fadeInSky();
     }
@@ -357,6 +413,7 @@ function initHourlyToggle() {
   hourlyToggle.addEventListener("click", () => {
     const isOpen = forecastEl.classList.toggle("open");
     hourlyToggle.classList.toggle("open", isOpen);
+    log.app("Hourly toggle:", isOpen);
   });
 }
 
@@ -368,6 +425,7 @@ function initDetectLocation() {
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude, longitude } = pos.coords;
+        log.app("Geolocation success:", { latitude, longitude });
         setLocationFromCoords("My Location", latitude, longitude);
       },
       err => {
@@ -379,12 +437,15 @@ function initDetectLocation() {
 
 // ---------- MAIN ----------
 (async () => {
+  log.app("Sky.init() starting");
   await Sky.init(gl, gpuTier);
+  log.app("Sky.init() complete");
 
   initSearch();
   initHourlyToggle();
   initDetectLocation();
 
+  log.app("Initial location: Indianapolis");
   setLocationByName("Indianapolis");
 
   function frame() {
