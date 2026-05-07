@@ -12,6 +12,17 @@ float hash(vec2 p) {
     return fract(p.x * p.y);
 }
 
+// Simple Rayleigh scattering curve
+float rayleigh(float cosTheta) {
+    return 0.75 * (1.0 + cosTheta * cosTheta);
+}
+
+// Simple Mie scattering curve
+float mie(float cosTheta, float g) {
+    float g2 = g * g;
+    return (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5);
+}
+
 void main() {
     vec2 uv = gl_FragCoord.xy / uResolution.xy;
     vec2 p  = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
@@ -19,100 +30,79 @@ void main() {
     // ----------------------------------------------------
     // FORCE MIDDAY ALWAYS
     // ----------------------------------------------------
-    float day = 1.0;      // 1 = full day
-    float sunBoost = 1.0; // brightness multiplier
+    float day = 1.0;
 
     // ----------------------------------------------------
-    // TRUE MIDDAY SKY (bright blue)
+    // REALISTIC MIDDAY SKY COLORS
     // ----------------------------------------------------
     float t = clamp(uv.y, 0.0, 1.0);
 
-    vec3 horizonColor = vec3(0.60, 0.82, 1.00);  // bright sky blue
-    vec3 zenithColor  = vec3(0.25, 0.60, 1.00);  // deeper but still bright
+    // Bright realistic sky blue
+    vec3 horizonColor = vec3(0.65, 0.82, 1.00);
+    vec3 zenithColor  = vec3(0.20, 0.55, 1.00);
 
     vec3 skyColor = mix(horizonColor, zenithColor, t);
 
     // ----------------------------------------------------
-    // SUN PATH — crosses screen every 5 hours
+    // SUN POSITION
     // ----------------------------------------------------
     float timeSec = uTime;
     float period  = 5.0 * 3600.0;
     float phase   = fract(timeSec / period);
 
-    // Keep sun fully visible
     float sunX = mix(-0.25, 0.25, phase);
     float sunY = 0.40 + 0.20 * sin(phase * 3.14159);
 
     vec2 sunPos = vec2(sunX, sunY);
-
     float d = length(p - sunPos);
 
     // ----------------------------------------------------
-    // SMALL GOLDEN SUN
+    // REALISTIC SUN DISC (smaller + golden)
     // ----------------------------------------------------
-    float sunRadius = 0.10;
-    float sunDisc   = smoothstep(sunRadius, sunRadius * 0.75, d);
+    float sunRadius = 0.08; // smaller
+    float sunDisc   = smoothstep(sunRadius, sunRadius * 0.65, d);
 
-    vec3 sunColor = vec3(1.0, 0.90, 0.55);  // golden daylight sun
-
-    // ----------------------------------------------------
-    // DAYTIME GLOW (soft, warm)
-    // ----------------------------------------------------
-    float offset = 0.0025;
-
-    float dR = length((p + vec2( offset, 0.0)) - sunPos);
-    float dG = length((p + vec2( 0.0,  offset)) - sunPos);
-    float dB = length((p + vec2(-offset, 0.0)) - sunPos);
-
-    float glowR = exp(-7.0 * dR);
-    float glowG = exp(-7.0 * dG);
-    float glowB = exp(-7.0 * dB);
-
-    vec3 refractGlow = vec3(glowR, glowG, glowB) * 0.35 * day;
+    vec3 sunColor = vec3(1.0, 0.92, 0.55); // golden core
 
     // ----------------------------------------------------
-    // VERY SUBTLE LENS RING (daytime)
+    // REALISTIC SCATTERING (Rayleigh + Mie)
     // ----------------------------------------------------
-    float ringRadius    = 0.16;
-    float ringThickness = 0.008;
+    vec2 dir = normalize(p - sunPos);
+    float cosTheta = dot(normalize(p), normalize(sunPos));
 
-    float ringR = smoothstep(ringRadius + ringThickness*1.3,
-                             ringRadius,
-                             length((p + vec2(0.003, 0.0)) - sunPos));
+    float ray = rayleigh(cosTheta) * 0.25;
+    float mieS = mie(cosTheta, 0.8) * 0.15;
 
-    float ringG = smoothstep(ringRadius + ringThickness*1.1,
-                             ringRadius,
-                             length((p + vec2(0.0, 0.003)) - sunPos));
+    vec3 scatterColor = vec3(0.45, 0.60, 0.90) * ray +
+                        vec3(1.0, 0.85, 0.55) * mieS;
 
-    float ringB = smoothstep(ringRadius + ringThickness*0.9,
-                             ringRadius,
-                             length((p + vec2(-0.003, 0.0)) - sunPos));
-
-    vec3 lensRing = vec3(ringR, ringG, ringB) * 0.12 * day;
+    skyColor += scatterColor * exp(-3.0 * d);
 
     // ----------------------------------------------------
-    // VERY LIGHT STREAK (daytime)
+    // SUN CORONA (white outer glow)
     // ----------------------------------------------------
-    float streak = exp(-20.0 * abs(p.y - sunPos.y)) *
+    float corona = exp(-12.0 * d);
+    vec3 coronaColor = vec3(1.0, 0.98, 0.90) * corona * 0.6;
+
+    // ----------------------------------------------------
+    // VERY SUBTLE LENS EFFECTS
+    // ----------------------------------------------------
+    float ring = smoothstep(0.14, 0.13, d);
+    vec3 lensRing = vec3(1.0, 0.95, 0.85) * ring * 0.08;
+
+    float streak = exp(-18.0 * abs(p.y - sunPos.y)) *
                    exp(-3.0  * abs(p.x - sunPos.x));
-
-    vec3 lensStreak = vec3(1.0, 0.95, 0.75) * streak * 0.06 * day;
-
-    // ----------------------------------------------------
-    // ATMOSPHERIC SCATTERING (blue, bright)
-    // ----------------------------------------------------
-    float scatter = exp(-4.0 * d);
-    skyColor += scatter * vec3(0.45, 0.60, 0.90);
+    vec3 lensStreak = vec3(1.0, 0.95, 0.75) * streak * 0.05;
 
     // ----------------------------------------------------
     // FINAL COLOR
     // ----------------------------------------------------
     vec3 color = skyColor;
 
-    color += sunColor * sunDisc * sunBoost;
-    color += refractGlow;
-    color += lensRing;
-    color += lensStreak;
+    color += sunColor * sunDisc;   // golden core
+    color += coronaColor;          // white corona
+    color += lensRing;             // subtle ring
+    color += lensStreak;           // subtle streak
 
     // Dither to remove banding
     color += hash(gl_FragCoord.xy) * 0.01;
