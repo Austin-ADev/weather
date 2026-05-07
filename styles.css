@@ -6,12 +6,14 @@ body {
   color: white;
 }
 
+/* SKY CANVAS — always behind everything */
 #sky {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   display: block;
+  z-index: 0;
   transition: opacity 0.4s ease;
 }
 
@@ -19,17 +21,20 @@ body {
   opacity: 0;
 }
 
+/* PANEL — always above the canvas */
 #panel {
   position: fixed;
   top: 0;
   left: 0;
   width: 380px;
   height: 100%;
+  z-index: 10;
   background: rgba(0,0,0,0.45);
   backdrop-filter: blur(12px);
   padding: 20px;
   overflow-y: auto;
 }
+
 
 #topBar {
   display: flex;
