@@ -2,8 +2,8 @@
 precision highp float;
 #endif
 
-uniform float u_time;        // your engine passes MINUTES, not seconds
-uniform vec2  u_resolution;
+uniform float uTime;        // seconds since start (from engine)
+uniform vec2  uResolution;  // viewport size
 
 // Tiny hash for dithering
 float hash(vec2 p) {
@@ -13,10 +13,10 @@ float hash(vec2 p) {
 }
 
 void main() {
-    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    vec2 uv = gl_FragCoord.xy / uResolution.xy;
 
     // Aspect-corrected centered coordinates
-    vec2 p = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / u_resolution.y;
+    vec2 p = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
 
     // ----------------------------------------------------
     // SKY GRADIENT
@@ -28,11 +28,9 @@ void main() {
 
     // ----------------------------------------------------
     // SUN PATH — crosses screen every 5 hours
-    // Your engine passes u_time in MINUTES → convert to seconds
     // ----------------------------------------------------
-    float timeSec = u_time * 60.0;
-
-    float period = 5.0 * 3600.0;      // 5 hours in seconds
+    float timeSec = uTime;              // your engine already passes seconds
+    float period = 5.0 * 3600.0;        // 5 hours in seconds
     float phase = fract(timeSec / period);
 
     // Keep sun fully on-screen
