@@ -1,12 +1,18 @@
+/* -------------------------------------------------------
+   GLOBAL
+------------------------------------------------------- */
 body {
   margin: 0;
   overflow: hidden;
   background: #000;
   font-family: system-ui, sans-serif;
   color: white;
+  position: relative; /* Required for stacking context */
 }
 
-/* SKY CANVAS — always behind everything */
+/* -------------------------------------------------------
+   SKY CANVAS (always behind everything)
+------------------------------------------------------- */
 #sky {
   position: fixed;
   inset: 0;
@@ -15,13 +21,16 @@ body {
   display: block;
   z-index: 0;
   transition: opacity 0.4s ease;
+  background: transparent !important; /* Prevent fallback blue */
 }
 
 #sky.fade-out {
   opacity: 0;
 }
 
-/* PANEL — always above the canvas */
+/* -------------------------------------------------------
+   LEFT PANEL (UI)
+------------------------------------------------------- */
 #panel {
   position: fixed;
   top: 0;
@@ -33,9 +42,12 @@ body {
   backdrop-filter: blur(12px);
   padding: 20px;
   overflow-y: auto;
+  box-sizing: border-box; /* Prevent overflow issues */
 }
 
-
+/* -------------------------------------------------------
+   TOP BAR
+------------------------------------------------------- */
 #topBar {
   display: flex;
   gap: 8px;
@@ -52,15 +64,7 @@ body {
   color: white;
 }
 
-#detectLocation {
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: none;
-  background: rgba(255,255,255,0.15);
-  color: white;
-  cursor: pointer;
-}
-
+#detectLocation,
 .unit-toggle {
   padding: 8px 12px;
   border-radius: 6px;
@@ -70,6 +74,9 @@ body {
   cursor: pointer;
 }
 
+/* -------------------------------------------------------
+   SEARCH RESULTS
+------------------------------------------------------- */
 #searchResults {
   background: rgba(0,0,0,0.6);
   border-radius: 6px;
@@ -86,6 +93,9 @@ body {
   background: rgba(255,255,255,0.1);
 }
 
+/* -------------------------------------------------------
+   CURRENT WEATHER
+------------------------------------------------------- */
 #current {
   margin-bottom: 20px;
 }
@@ -106,6 +116,9 @@ body {
   margin: 4px 0;
 }
 
+/* -------------------------------------------------------
+   SECTION TOGGLES
+------------------------------------------------------- */
 .sectionToggle {
   margin-top: 20px;
   padding: 10px;
@@ -114,6 +127,9 @@ body {
   cursor: pointer;
 }
 
+/* -------------------------------------------------------
+   FORECAST SECTIONS
+------------------------------------------------------- */
 #forecast,
 #dailyForecast {
   margin-top: 10px;
@@ -127,6 +143,9 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
+/* -------------------------------------------------------
+   RADAR
+------------------------------------------------------- */
 #radarFrame {
   width: 100%;
   height: 300px;

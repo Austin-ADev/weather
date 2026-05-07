@@ -13,6 +13,8 @@ const log = {
   radar: (...msg) => console.log("%c[RADAR]", "color:#fc9", ...msg)
 };
 
+let firstLoad = true;
+
 /* -------------------------------------------------------
    UNIT SYSTEM (US ↔ Metric)
 ------------------------------------------------------- */
@@ -357,7 +359,10 @@ function initSearch() {
    APPLY WEATHER TO UI
 ------------------------------------------------------- */
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
-  fadeOutSky();
+
+  // Only fade out AFTER the first load
+  if (!firstLoad) fadeOutSky();
+  firstLoad = false;
 
   setTimeout(async () => {
     try {
