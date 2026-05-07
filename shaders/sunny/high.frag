@@ -37,37 +37,45 @@ void main() {
     // ----------------------------------------------------
     float t = clamp(uv.y, 0.0, 1.0);
 
-    // Bright realistic sky blue
     vec3 horizonColor = vec3(0.65, 0.82, 1.00);
     vec3 zenithColor  = vec3(0.20, 0.55, 1.00);
 
     vec3 skyColor = mix(horizonColor, zenithColor, t);
 
     // ----------------------------------------------------
-    // SUN POSITION
+    // SUN POSITION (shifted right)
     // ----------------------------------------------------
     float timeSec = uTime;
     float period  = 5.0 * 3600.0;
     float phase   = fract(timeSec / period);
 
-    float sunX = mix(-0.25, 0.25, phase);
+    float sunX = mix(0.05, 0.55, phase);   // shifted right
     float sunY = 0.40 + 0.20 * sin(phase * 3.14159);
 
     vec2 sunPos = vec2(sunX, sunY);
     float d = length(p - sunPos);
 
     // ----------------------------------------------------
-    // REALISTIC SUN DISC (smaller + golden)
+    // DYNAMIC SUN BRIGHTNESS (based on elevation)
     // ----------------------------------------------------
-    float sunRadius = 0.08; // smaller
-    float sunDisc   = smoothstep(sunRadius, sunRadius * 0.65, d);
+    float elevation = clamp(sunY + 0.2, 0.0, 1.0);
+    float sunBrightness = pow(elevation, 1.5) * 1.4;
 
-    vec3 sunColor = vec3(1.0, 0.92, 0.55); // golden core
+    vec3 sunTint = mix(
+        vec3(1.0, 0.85, 0.55),   // warm low sun
+        vec3(1.0, 0.95, 0.85),   // white-gold midday
+        elevation
+    );
+
+    // ----------------------------------------------------
+    // SUN DISC (smaller + golden)
+    // ----------------------------------------------------
+    float sunRadius = 0.08;
+    float sunDisc   = smoothstep(sunRadius, sunRadius * 0.65, d);
 
     // ----------------------------------------------------
     // REALISTIC SCATTERING (Rayleigh + Mie)
     // ----------------------------------------------------
-    vec2 dir = normalize(p - sunPos);
     float cosTheta = dot(normalize(p), normalize(sunPos));
 
     float ray = rayleigh(cosTheta) * 0.25;
@@ -82,27 +90,27 @@ void main() {
     // SUN CORONA (white outer glow)
     // ----------------------------------------------------
     float corona = exp(-12.0 * d);
-    vec3 coronaColor = vec3(1.0, 0.98, 0.90) * corona * 0.6;
+    vec3 coronaColor = vec3(1.0, 0.98, 0.90) * corona * 0.6 * sunBrightness;
 
     // ----------------------------------------------------
     // VERY SUBTLE LENS EFFECTS
     // ----------------------------------------------------
     float ring = smoothstep(0.14, 0.13, d);
-    vec3 lensRing = vec3(1.0, 0.95, 0.85) * ring * 0.08;
+    vec3 lensRing = vec3(1.0, 0.95, 0.85) * ring * 0.08 * (0.4 + 0.6 * elevation);
 
     float streak = exp(-18.0 * abs(p.y - sunPos.y)) *
                    exp(-3.0  * abs(p.x - sunPos.x));
-    vec3 lensStreak = vec3(1.0, 0.95, 0.75) * streak * 0.05;
+    vec3 lensStreak = vec3(1.0, 0.95, 0.75) * streak * 0.05 * (0.3 + 0.7 * elevation);
 
     // ----------------------------------------------------
     // FINAL COLOR
     // ----------------------------------------------------
     vec3 color = skyColor;
 
-    color += sunColor * sunDisc;   // golden core
-    color += coronaColor;          // white corona
-    color += lensRing;             // subtle ring
-    color += lensStreak;           // subtle streak
+    color += sunTint * sunDisc * sunBrightness;
+    color += coronaColor;
+    color += lensRing;
+    color += lensStreak;
 
     // Dither to remove banding
     color += hash(gl_FragCoord.xy) * 0.01;
