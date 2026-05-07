@@ -91,6 +91,9 @@ function setRadar(lat, lon) {
   `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m` +
   `&hourly=temperature_2m,weather_code` +
   `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase` +
+  `&temperature_unit=fahrenheit` +
+  `&windspeed_unit=mph` +
+  `&precipitation_unit=inch` +
   `&timezone=auto`;
   radarFrame.src = url;
 }
