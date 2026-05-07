@@ -261,15 +261,15 @@ async function fetchWeather(lat, lon) {
   const units = getUnitParams();
 
   const url =
-    `https://api.open-meteo.com/v1/forecast` +
-    `?latitude=${lat}&longitude=${lon}` +
-    `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m` +
-    `&hourly=temperature_2m,weather_code` +
-    `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase` +
-    `&temperature_unit=${units.temp}` +
-    `&windspeed_unit=${units.wind}` +
-    `&precipitation_unit=${units.precip}` +
-    `&timezone=auto`;
+  `https://api.open-meteo.com/v1/forecast` +
+  `?latitude=${lat}&longitude=${lon}` +
+  `&current_weather=true` +
+  `&hourly=temperature_2m,weather_code` +
+  `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase` +
+  `&temperature_unit=${units.temp}` +
+  `&windspeed_unit=${units.wind}` +
+  `&precipitation_unit=${units.precip}` +
+  `&timezone=auto`;
 
   log.fetch("Fetching weather:", url);
 
