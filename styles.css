@@ -21,7 +21,7 @@ body {
   display: block;
   z-index: 0;
   transition: opacity 0.4s ease;
-  background: transparent !important; /* Prevent fallback blue */
+  background: transparent !important;
 }
 
 #sky.fade-out {
@@ -29,20 +29,25 @@ body {
 }
 
 /* -------------------------------------------------------
-   LEFT PANEL (UI)
+   CENTERED PANEL (floating glass card)
 ------------------------------------------------------- */
 #panel {
   position: fixed;
-  top: 0;
-  left: 0;
+  top: 50%;
+  left: 50%;
   width: 380px;
-  height: 100%;
+  height: auto;
+  transform: translate(-50%, -50%);
   z-index: 10;
+
   background: rgba(0,0,0,0.45);
   backdrop-filter: blur(12px);
   padding: 20px;
+  box-sizing: border-box;
+  border-radius: 12px;
+
+  max-height: 90vh;
   overflow-y: auto;
-  box-sizing: border-box; /* Prevent overflow issues */
 }
 
 /* -------------------------------------------------------
@@ -98,6 +103,7 @@ body {
 ------------------------------------------------------- */
 #current {
   margin-bottom: 20px;
+  text-align: center;
 }
 
 #cityName {
@@ -125,6 +131,7 @@ body {
   background: rgba(255,255,255,0.1);
   border-radius: 6px;
   cursor: pointer;
+  text-align: center;
 }
 
 /* -------------------------------------------------------
@@ -151,4 +158,5 @@ body {
   height: 300px;
   border: none;
   margin-top: 10px;
+  border-radius: 8px;
 }

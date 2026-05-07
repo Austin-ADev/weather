@@ -360,7 +360,6 @@ function initSearch() {
 ------------------------------------------------------- */
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
 
-  // Only fade out AFTER the first load
   if (!firstLoad) fadeOutSky();
   firstLoad = false;
 
@@ -368,14 +367,14 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
     try {
       const data = await fetchWeather(lat, lon);
 
-      const current = data.current;
+      const current = data.current_weather;
       const daily = data.daily;
       const hourly = data.hourly;
       const timezone = data.timezone || timezoneOverride || "UTC";
 
       const units = getUnitParams();
 
-      const code = current.weather_code;
+      const code = current.weathercode;
       const hour = getLocalHour(current.time, timezone);
       const isNight = hour < 6 || hour >= 20;
       const weatherType = mapWeatherType(code, isNight);
@@ -384,11 +383,12 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
 
       cityNameEl.textContent = label;
       localtimeEl.textContent = formatTime(current.time, timezone);
-      tempEl.textContent = `${Math.round(current.temperature_2m)}${units.tempSymbol}`;
+      tempEl.textContent = `${Math.round(current.temperature)}${units.tempSymbol}`;
       conditionEl.textContent = WeatherEngine.describe(code);
-      humidityEl.textContent = `${Math.round(current.relative_humidity_2m)}%`;
-      windEl.textContent = `${Math.round(current.wind_speed_10m)} ${units.windSymbol}`;
-      feelsEl.textContent = `${Math.round(current.apparent_temperature)}${units.tempSymbol}`;
+
+      humidityEl.textContent = `${Math.round(hourly.relative_humidity_2m[0])}%`;
+      windEl.textContent = `${Math.round(current.windspeed)} ${units.windSymbol}`;
+      feelsEl.textContent = `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`;
 
       moonLabelEl.textContent = moonPhaseLabel(daily.moon_phase[0]);
 
