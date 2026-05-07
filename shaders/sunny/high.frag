@@ -17,13 +17,12 @@ void main() {
     vec2 p  = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
 
     // ----------------------------------------------------
-    // MIDDAY SKY GRADIENT (bright blue)
+    // TRUE MIDDAY SKY (bright blue, no purple)
     // ----------------------------------------------------
     float t = clamp(uv.y, 0.0, 1.0);
 
-    // Bright midday colors
-    vec3 horizonColor = vec3(0.45, 0.70, 1.00);   // bright sky blue
-    vec3 zenithColor  = vec3(0.15, 0.45, 0.95);   // deeper but still bright blue
+    vec3 horizonColor = vec3(0.55, 0.78, 1.00);  // bright sky blue
+    vec3 zenithColor  = vec3(0.20, 0.55, 1.00);  // deeper but still bright
 
     vec3 skyColor = mix(horizonColor, zenithColor, t);
 
@@ -35,69 +34,69 @@ void main() {
     float phase   = fract(timeSec / period);
 
     // Keep sun fully visible
-    float sunX = mix(-0.3, 0.3, phase);
-    float sunY = 0.35 + 0.25 * sin(phase * 3.14159);
+    float sunX = mix(-0.25, 0.25, phase);
+    float sunY = 0.35 + 0.20 * sin(phase * 3.14159);
 
     vec2 sunPos = vec2(sunX, sunY);
 
     float d = length(p - sunPos);
 
     // ----------------------------------------------------
-    // SUN DISC (bigger + warmer)
+    // SMALLER GOLDEN SUN
     // ----------------------------------------------------
-    float sunRadius = 0.20;
+    float sunRadius = 0.12;  // smaller
     float sunDisc   = smoothstep(sunRadius, sunRadius * 0.75, d);
 
-    vec3 sunColor = vec3(1.0, 0.98, 0.85);  // warm daylight sun
+    vec3 sunColor = vec3(1.0, 0.92, 0.55);  // golden daylight sun
 
     // ----------------------------------------------------
-    // DAYTIME GLOW (soft, warm, not purple)
+    // DAYTIME GLOW (soft, warm)
     // ----------------------------------------------------
-    float offset = 0.003;
+    float offset = 0.0025;
 
     float dR = length((p + vec2( offset, 0.0)) - sunPos);
     float dG = length((p + vec2( 0.0,  offset)) - sunPos);
     float dB = length((p + vec2(-offset, 0.0)) - sunPos);
 
-    float glowR = exp(-8.0 * dR);
-    float glowG = exp(-8.0 * dG);
-    float glowB = exp(-8.0 * dB);
+    float glowR = exp(-7.0 * dR);
+    float glowG = exp(-7.0 * dG);
+    float glowB = exp(-7.0 * dB);
 
-    vec3 refractGlow = vec3(glowR, glowG, glowB) * 0.5;
+    vec3 refractGlow = vec3(glowR, glowG, glowB) * 0.35;
 
     // ----------------------------------------------------
-    // LENS RING (much softer for daytime)
+    // VERY SUBTLE LENS RING (daytime)
     // ----------------------------------------------------
-    float ringRadius    = 0.25;
-    float ringThickness = 0.01;
+    float ringRadius    = 0.18;
+    float ringThickness = 0.008;
 
     float ringR = smoothstep(ringRadius + ringThickness*1.3,
                              ringRadius,
-                             length((p + vec2(0.004, 0.0)) - sunPos));
+                             length((p + vec2(0.003, 0.0)) - sunPos));
 
     float ringG = smoothstep(ringRadius + ringThickness*1.1,
                              ringRadius,
-                             length((p + vec2(0.0, 0.004)) - sunPos));
+                             length((p + vec2(0.0, 0.003)) - sunPos));
 
     float ringB = smoothstep(ringRadius + ringThickness*0.9,
                              ringRadius,
-                             length((p + vec2(-0.004, 0.0)) - sunPos));
+                             length((p + vec2(-0.003, 0.0)) - sunPos));
 
-    vec3 lensRing = vec3(ringR, ringG, ringB) * 0.25;
+    vec3 lensRing = vec3(ringR, ringG, ringB) * 0.15;
 
     // ----------------------------------------------------
-    // LENS STREAK (very subtle for daytime)
+    // VERY LIGHT STREAK (daytime)
     // ----------------------------------------------------
-    float streak = exp(-25.0 * abs(p.y - sunPos.y)) *
+    float streak = exp(-20.0 * abs(p.y - sunPos.y)) *
                    exp(-3.0  * abs(p.x - sunPos.x));
 
-    vec3 lensStreak = vec3(1.0, 0.9, 0.7) * streak * 0.10;
+    vec3 lensStreak = vec3(1.0, 0.95, 0.75) * streak * 0.08;
 
     // ----------------------------------------------------
-    // ATMOSPHERIC SCATTERING (light + blue)
+    // ATMOSPHERIC SCATTERING (blue, not purple)
     // ----------------------------------------------------
-    float scatter = exp(-5.0 * d);
-    skyColor += scatter * vec3(0.35, 0.45, 0.65);
+    float scatter = exp(-4.0 * d);
+    skyColor += scatter * vec3(0.40, 0.55, 0.85);
 
     // ----------------------------------------------------
     // FINAL COLOR
