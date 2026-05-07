@@ -1,272 +1,130 @@
-/* Base */
 body {
   margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+  overflow: hidden;
   background: #000;
-  overflow-x: hidden;
-  color: #fff;
+  font-family: system-ui, sans-serif;
+  color: white;
 }
 
-html, body {
-  height: 100%;
-}
-
-/* SKY CANVAS (ONLY THING THAT FADES) */
 #sky {
   position: fixed;
   inset: 0;
-  z-index: -1;
-  transition: opacity 0.30s ease;
+  width: 100%;
+  height: 100%;
+  display: block;
+  transition: opacity 0.4s ease;
 }
 
 #sky.fade-out {
   opacity: 0;
 }
 
-/* WEATHER BOX */
-.weather-box {
-  position: relative;
-  width: 480px;
-  margin: 60px auto;
-  padding: 32px;
-  border-radius: 28px;
-  backdrop-filter: blur(25px) saturate(180%);
-  background: rgba(10, 10, 15, 0.82);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.8);
-  color: #f8f9ff;
+#panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 380px;
+  height: 100%;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(12px);
+  padding: 20px;
+  overflow-y: auto;
 }
 
-/* SEARCH BAR */
-.search-wrapper {
-  position: relative;
-  width: 100%;
-  margin-bottom: 16px;
+#topBar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-.search-wrapper input {
-  width: 100%;
-  padding: 16px 100px 16px 16px;
-  border-radius: 16px;
+#citySearch {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
   border: none;
   outline: none;
-  background: rgba(255, 255, 255, 0.10);
-  color: #f8f9ff;
-  font-size: 17px;
-  backdrop-filter: blur(20px);
+  background: rgba(255,255,255,0.1);
+  color: white;
 }
 
-.search-icon-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(255,255,255,0.12);
+#detectLocation {
+  padding: 8px 12px;
+  border-radius: 6px;
   border: none;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(255,255,255,0.15);
+  color: white;
   cursor: pointer;
-  color: #fff;
-  transition: background 0.15s, opacity 0.15s;
 }
 
-.search-icon-btn:hover {
-  background: rgba(255,255,255,0.18);
+.unit-toggle {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  cursor: pointer;
 }
 
-#detectLocation { right: 52px; }
-#voiceSearch { right: 10px; }
-
-.icon {
-  width: 20px;
-  height: 20px;
-  fill: #fff;
-  opacity: 0.85;
-}
-
-/* Search results */
 #searchResults {
-  width: 100%;
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
-  margin-bottom: 16px;
+  background: rgba(0,0,0,0.6);
+  border-radius: 6px;
   display: none;
-  padding: 6px 0;
+  margin-bottom: 12px;
 }
 
 .search-item {
-  padding: 12px 18px;
+  padding: 8px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  font-size: 15px;
 }
 
 .search-item:hover {
-  background: rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.1);
 }
 
-/* Header */
-.city-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 18px;
-}
-
-.city-name {
-  font-size: 26px;
-  font-weight: 600;
-}
-
-.localtime {
-  font-size: 15px;
-  opacity: 0.8;
-}
-
-/* Moon */
-.moon-phase {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  opacity: 0.9;
-}
-
-.moon-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fff, #ddd 60%, #aaa 100%);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
-}
-
-/* Current weather */
-.current-row {
+#current {
   margin-bottom: 20px;
 }
 
-.icon-and-temp {
-  display: flex;
-  align-items: center;
-  gap: 18px;
+#cityName {
+  font-size: 28px;
+  font-weight: bold;
 }
 
-.temp {
-  font-size: 64px;
-  font-weight: 700;
+#temp {
+  font-size: 48px;
+  margin: 10px 0;
 }
 
-.condition {
-  font-size: 20px;
-  opacity: 0.9;
-}
-
-/* Details */
-.details {
-  font-size: 16px;
-  opacity: 0.9;
-  margin-bottom: 24px;
-}
-
-.detail-row {
+.row {
   display: flex;
   justify-content: space-between;
-  margin: 6px 0;
+  margin: 4px 0;
 }
 
-/* Forecast titles */
-.forecast-title {
-  margin-top: 28px;
-  margin-bottom: 10px;
-  font-size: 18px;
-  opacity: 0.9;
-  border-bottom: 1px solid rgba(255,255,255,0.15);
-  padding-bottom: 6px;
-}
-
-/* Collapsible */
-.collapsible {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.sectionToggle {
+  margin-top: 20px;
+  padding: 10px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 6px;
   cursor: pointer;
-  user-select: none;
 }
 
-.chevron {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: #fff;
-  stroke-width: 2;
-  transition: transform 0.25s ease;
-  opacity: 0.8;
-}
-
-.collapsible.open .chevron {
-  transform: rotate(180deg);
-}
-
-/* Hourly forecast */
-#forecast {
-  margin-top: 10px;
-  overflow: hidden;
-  max-height: 0;
-  transition: max-height 0.35s ease;
-}
-
-#forecast.open {
-  max-height: 800px;
-}
-
-.forecast-hour {
-  display: grid;
-  grid-template-columns: 80px 1fr 1fr;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  font-size: 15px;
-  align-items: center;
-}
-
-/* Daily forecast */
+#forecast,
 #dailyForecast {
   margin-top: 10px;
 }
 
+.forecast-hour,
 .daily-row {
-  display: grid;
-  grid-template-columns: 80px 1fr 1fr;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  font-size: 15px;
-  align-items: center;
-}
-
-/* Radar */
-#radarContainer {
-  margin-top: 16px;
-  border-radius: 20px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.12);
-  height: 360px;
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
 #radarFrame {
   width: 100%;
-  height: 100%;
+  height: 300px;
   border: none;
-}
-
-/* Weather icon */
-.weather-icon {
-  width: 64px;
-  height: 64px;
-}
-.weather-icon svg {
-  width: 100%;
-  height: 100%;
+  margin-top: 10px;
 }
