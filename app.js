@@ -15,7 +15,6 @@ const tempEl = document.getElementById("temp");
 const humidityEl = document.getElementById("humidity");
 const windEl = document.getElementById("wind");
 const feelsEl = document.getElementById("feels");
-const moonLabelEl = document.getElementById("moonLabel");
 
 const forecastEl = document.getElementById("forecast");
 const dailyForecastEl = document.getElementById("dailyForecast");
@@ -54,7 +53,7 @@ function getUnitParams() {
 }
 
 // =========================================================
-// TIME + MOON
+// TIME
 // =========================================================
 function formatTime(dateStr, timezone) {
   console.log("[DIAG] formatTime:", dateStr, timezone);
@@ -73,118 +72,58 @@ function formatTime(dateStr, timezone) {
   }
 }
 
-function moonPhaseLabel(phase) {
-  console.log("[DIAG] moonPhaseLabel input:", phase);
-  let label;
-  if (phase < 0.03 || phase > 0.97) label = "New Moon";
-  else if (phase < 0.22) label = "Waxing Crescent";
-  else if (phase < 0.28) label = "First Quarter";
-  else if (phase < 0.47) label = "Waxing Gibbous";
-  else if (phase < 0.53) label = "Full Moon";
-  else if (phase < 0.72) label = "Waning Gibbous";
-  else if (phase < 0.78) label = "Last Quarter";
-  else label = "Waning Crescent";
-  console.log("[DIAG] moonPhaseLabel ->", label);
-  return label;
-}
-
 // =========================================================
-// WEATHER API (FINAL MERGED ENGINE)
+// WEATHER API (NO MOON PHASE)
 // =========================================================
 async function fetchWeather(lat, lon) {
   console.log("[DIAG] fetchWeather called with:", lat, lon);
-  if (lat == null || lon == null) {
-    console.error("[DIAG] ERROR: fetchWeather got invalid lat/lon:", lat, lon);
-  }
 
   const units = getUnitParams();
 
-  async function tryFetch(base) {
-    const url =
-      `${base}/v1/forecast` +
-      `?latitude=${lat}&longitude=${lon}` +
-      `&current_weather=true` +
-      `&hourly=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,cloudcover` +
-      `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase,sunrise,sunset` +
-      `&temperature_unit=${units.temp}` +
-      `&windspeed_unit=${units.wind}` +
-      `&precipitation_unit=${units.precip}` +
-      `&timezone=auto`;
+  const url =
+    `https://api.open-meteo.com/v1/forecast` +
+    `?latitude=${lat}&longitude=${lon}` +
+    `&current_weather=true` +
+    `&hourly=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,cloudcover` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset` +
+    `&temperature_unit=${units.temp}` +
+    `&windspeed_unit=${units.wind}` +
+    `&precipitation_unit=${units.precip}` +
+    `&timezone=auto`;
 
-    console.log("[DIAG] TRY WEATHER URL:", url);
+  console.log("[DIAG] WEATHER URL:", url);
 
-    let res;
-    try {
-      res = await fetch(url);
-    } catch (e) {
-      console.error("[DIAG] NETWORK ERROR fetching weather from", base, e);
-      return null;
-    }
-
-    console.log("[DIAG] Weather response from", base, ":", res.status, res.statusText);
-
-    const raw = await res.text();
-
-    try {
-      const json = JSON.parse(raw);
-
-      if (json.error) {
-        console.error("[DIAG] API error payload from", base, ":", json);
-        return null;
-      }
-
-      if (!json.daily) json.daily = {};
-      if (!Array.isArray(json.daily.moon_phase)) {
-        console.warn("[DIAG] moon_phase missing or invalid, patching to [0]");
-        json.daily.moon_phase = [0];
-      }
-
-      console.log("[DIAG] Weather JSON from", base, ":", json);
-      return json;
-    } catch (e) {
-      console.error("[DIAG] JSON parse failed for", base, e);
-      console.error("[DIAG] Raw weather response from", base, ":", raw);
-      return null;
-    }
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    console.error("[DIAG] NETWORK ERROR:", e);
+    return null;
   }
 
-  let data = await tryFetch("https://api.open-meteo.com");
-  if (data) return data;
+  console.log("[DIAG] Weather response:", res.status, res.statusText);
 
-  data = await tryFetch("https://open-meteo.com");
-  if (data) return data;
+  const raw = await res.text();
 
-  console.error("[DIAG] All weather APIs failed — using safe fallback");
+  try {
+    const json = JSON.parse(raw);
 
-  const nowIso = new Date().toISOString();
-  return {
-    current_weather: {
-      temperature: 0,
-      weathercode: 0,
-      windspeed: 0,
-      time: nowIso
-    },
-    hourly: {
-      temperature_2m: [0],
-      relative_humidity_2m: [0],
-      apparent_temperature: [0],
-      cloudcover: [0],
-      time: [nowIso]
-    },
-    daily: {
-      temperature_2m_max: [0],
-      temperature_2m_min: [0],
-      weather_code: [0],
-      moon_phase: [0],
-      sunrise: [nowIso],
-      sunset: [nowIso]
-    },
-    timezone: "UTC"
-  };
+    if (json.error) {
+      console.error("[DIAG] API error payload:", json);
+      return null;
+    }
+
+    console.log("[DIAG] Weather JSON:", json);
+    return json;
+  } catch (e) {
+    console.error("[DIAG] JSON parse failed:", e);
+    console.error("[DIAG] Raw weather response:", raw);
+    return null;
+  }
 }
 
 // =========================================================
-// GEOCODER (PATCHED)
+// GEOCODER
 // =========================================================
 async function geocodeCity(name) {
   console.log("[DIAG] geocodeCity called with:", name);
@@ -201,7 +140,7 @@ async function geocodeCity(name) {
     res = await fetch(url);
   } catch (e) {
     console.error("[DIAG] NETWORK ERROR fetching geocode:", e);
-    throw e;
+    return { results: [] };
   }
 
   console.log("[DIAG] Geocode response:", res.status, res.statusText);
@@ -213,7 +152,7 @@ async function geocodeCity(name) {
     console.log("[DIAG] Geocode JSON:", json);
     return json;
   } catch (e) {
-    console.error("[DIAG] JSON parse failed in geocodeCity:", e);
+    console.error("[DIAG] JSON parse failed:", e);
     console.error("[DIAG] Raw geocode response:", raw);
     return { results: [] };
   }
@@ -266,7 +205,6 @@ function initSearch() {
     }, 300);
   });
 }
-
 // =========================================================
 // FORECAST BUILDERS
 // =========================================================
@@ -512,7 +450,9 @@ async function switchShader(name) {
 
   currentShaderName = name;
 }
-
+// =========================================================
+// WEBGL SKY (continued)
+// =========================================================
 async function initSky() {
   console.log("[DIAG] initSky called");
   gl = canvas.getContext("webgl", { antialias: true });
@@ -529,6 +469,7 @@ async function initSky() {
     gl.viewport(0, 0, canvas.width, canvas.height);
     console.log("[DIAG] Canvas resized:", canvas.width, canvas.height);
   }
+
   window.addEventListener("resize", resize);
   resize();
 
@@ -543,6 +484,7 @@ async function initSky() {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(frame);
   }
+
   frame();
 }
 
@@ -551,79 +493,79 @@ async function initSky() {
 // =========================================================
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
   console.log("[DIAG] setLocationFromCoords:", label, lat, lon, timezoneOverride);
-  if (lat == null || lon == null) {
-    console.error("[DIAG] ERROR: setLocationFromCoords got invalid lat/lon");
+
+  const data = await fetchWeather(lat, lon);
+  console.log("[DIAG] Weather data received:", data);
+
+  if (!data) {
+    console.error("[DIAG] No weather data — aborting UI update");
+    return;
   }
 
-  try {
-    const data = await fetchWeather(lat, lon);
-    console.log("[DIAG] Weather data received:", data);
+  const current = data.current_weather || {};
+  const daily = data.daily || {};
+  const hourly = data.hourly || {};
+  const timezone = data.timezone || timezoneOverride || "UTC";
+  const units = getUnitParams();
 
-    const current = data.current_weather || {};
-    const daily = data.daily || {};
-    const hourly = data.hourly || {};
-    const timezone = data.timezone || timezoneOverride || "UTC";
-    const units = getUnitParams();
+  cityNameEl.textContent = label;
+  localtimeEl.textContent = current.time ? formatTime(current.time, timezone) : "--:--";
 
-    cityNameEl.textContent = label;
-    localtimeEl.textContent = current.time ? formatTime(current.time, timezone) : "--:--";
-    tempEl.textContent =
-      typeof current.temperature === "number"
-        ? `${Math.round(current.temperature)}${units.tempSymbol}`
-        : `--${units.tempSymbol}`;
-    conditionEl.textContent = `Code ${current.weathercode ?? "--"}`;
-    humidityEl.textContent =
-      hourly.relative_humidity_2m && hourly.relative_humidity_2m.length
-        ? `${Math.round(hourly.relative_humidity_2m[0])}%`
-        : "--%";
-    windEl.textContent =
-      typeof current.windspeed === "number"
-        ? `${Math.round(current.windspeed)} ${units.windSymbol}`
-        : `-- ${units.windSymbol}`;
-    feelsEl.textContent =
-      hourly.apparent_temperature && hourly.apparent_temperature.length
-        ? `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`
-        : `--${units.tempSymbol}`;
-    moonLabelEl.textContent =
-      daily.moon_phase && daily.moon_phase.length
-        ? moonPhaseLabel(daily.moon_phase[0])
-        : "--";
+  tempEl.textContent =
+    typeof current.temperature === "number"
+      ? `${Math.round(current.temperature)}${units.tempSymbol}`
+      : `--${units.tempSymbol}`;
 
-    buildHourly(hourly, timezone);
-    buildDaily(daily);
-    setRadar(lat, lon);
+  conditionEl.textContent = `Code ${current.weathercode ?? "--"}`;
 
-    if (hourly.cloudcover && hourly.cloudcover.length) {
-      currentWeatherAmount = Math.min(1, hourly.cloudcover[0] / 100);
-    } else {
-      currentWeatherAmount = 0.0;
-    }
-    console.log("[DIAG] currentWeatherAmount:", currentWeatherAmount);
+  humidityEl.textContent =
+    hourly.relative_humidity_2m && hourly.relative_humidity_2m.length
+      ? `${Math.round(hourly.relative_humidity_2m[0])}%`
+      : "--%";
 
-    const shaderName = pickShaderForTimeAndWeather(current, daily);
-    await switchShader(shaderName);
+  windEl.textContent =
+    typeof current.windspeed === "number"
+      ? `${Math.round(current.windspeed)} ${units.windSymbol}`
+      : `-- ${units.windSymbol}`;
 
-  } catch (e) {
-    console.error("[DIAG] Weather error in setLocationFromCoords:", e);
+  feelsEl.textContent =
+    hourly.apparent_temperature && hourly.apparent_temperature.length
+      ? `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`
+      : `--${units.tempSymbol}`;
+
+  buildHourly(hourly, timezone);
+  buildDaily(daily);
+  setRadar(lat, lon);
+
+  if (hourly.cloudcover && hourly.cloudcover.length) {
+    currentWeatherAmount = Math.min(1, hourly.cloudcover[0] / 100);
+  } else {
+    currentWeatherAmount = 0.0;
   }
+
+  console.log("[DIAG] currentWeatherAmount:", currentWeatherAmount);
+
+  const shaderName = pickShaderForTimeAndWeather(current, daily);
+  await switchShader(shaderName);
 }
 
 async function setLocationByName(name) {
   console.log("[DIAG] setLocationByName:", name);
-  try {
-    const geo = await geocodeCity(name);
-    console.log("[DIAG] Geocode result:", geo);
-    if (!geo.results?.length) {
-      console.error("[DIAG] No geocode results for:", name);
-      return;
-    }
-    const r = geo.results[0];
-    const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
-    console.log("[DIAG] Using geocode:", label, r.latitude, r.longitude, r.timezone);
-    setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
-  } catch (e) {
-    console.error("[DIAG] setLocationByName error:", e);
+
+  const geo = await geocodeCity(name);
+  console.log("[DIAG] Geocode result:", geo);
+
+  if (!geo.results?.length) {
+    console.error("[DIAG] No geocode results for:", name);
+    return;
   }
+
+  const r = geo.results[0];
+  const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
+
+  console.log("[DIAG] Using geocode:", label, r.latitude, r.longitude, r.timezone);
+
+  setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
 }
 
 // =========================================================
