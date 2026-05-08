@@ -27,10 +27,17 @@ void main() {
     vec2 uv = gl_FragCoord.xy / uResolution.xy;
 
     // ----------------------------------------------------
-    // ASPECT‑CORRECTED COORDINATES (REAL FIX)
+    // TRUE ASPECT‑CORRECTED COORDINATES
     // ----------------------------------------------------
-    vec2 p = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
-    p.x *= uResolution.x / uResolution.y;   // <-- CORRECT FIX
+    // 1. Normalize to center
+    vec2 p = (gl_FragCoord.xy - 0.5 * uResolution.xy);
+
+    // 2. Divide by *min* dimension to keep circles circular
+    float scale = min(uResolution.x, uResolution.y);
+    p /= scale;
+
+    // Now p.x and p.y are perfectly uniform.
+    // No stretching. No droplet. No axe head.
 
     // ----------------------------------------------------
     // FORCE MIDDAY ALWAYS
@@ -58,6 +65,10 @@ void main() {
     float sunY = 0.40 + 0.20 * sin(phase * 3.14159);
 
     vec2 sunPos = vec2(sunX, sunY);
+
+    // ----------------------------------------------------
+    // DISTANCE TO SUN (now perfectly circular)
+    // ----------------------------------------------------
     float d = length(p - sunPos);
 
     // ----------------------------------------------------
