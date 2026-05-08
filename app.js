@@ -89,26 +89,23 @@ function moonPhaseLabel(phase) {
 }
 
 // =========================================================
-// WEATHER API (FINAL PATCHED VERSION)
+// WEATHER API (FINAL MERGED ENGINE)
 // =========================================================
 async function fetchWeather(lat, lon) {
   console.log("[DIAG] fetchWeather called with:", lat, lon);
-
   if (lat == null || lon == null) {
     console.error("[DIAG] ERROR: fetchWeather got invalid lat/lon:", lat, lon);
   }
 
   const units = getUnitParams();
 
-  // Helper: attempt fetch from a given base URL
   async function tryFetch(base) {
     const url =
       `${base}/v1/forecast` +
       `?latitude=${lat}&longitude=${lon}` +
       `&current_weather=true` +
       `&hourly=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,cloudcover` +
-      `&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset` + 
-      // moon_phase intentionally removed
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase,sunrise,sunset` +
       `&temperature_unit=${units.temp}` +
       `&windspeed_unit=${units.wind}` +
       `&precipitation_unit=${units.precip}` +
@@ -120,65 +117,101 @@ async function fetchWeather(lat, lon) {
     try {
       res = await fetch(url);
     } catch (e) {
-      console.error("[DIAG] NETWORK ERROR:", e);
+      console.error("[DIAG] NETWORK ERROR fetching weather from", base, e);
       return null;
     }
 
-    console.log("[DIAG] Weather response:", res.status, res.statusText);
+    console.log("[DIAG] Weather response from", base, ":", res.status, res.statusText);
 
     const raw = await res.text();
 
     try {
       const json = JSON.parse(raw);
 
-      // Insert safe moon_phase placeholder
-      if (!json.daily.moon_phase) {
+      if (!json.daily) json.daily = {};
+      if (!Array.isArray(json.daily.moon_phase)) {
+        console.warn("[DIAG] moon_phase missing or invalid, patching to [0]");
         json.daily.moon_phase = [0];
       }
 
+      console.log("[DIAG] Weather JSON from", base, ":", json);
       return json;
     } catch (e) {
-      console.error("[DIAG] JSON parse failed:", e);
-      console.error("[DIAG] Raw response:", raw);
+      console.error("[DIAG] JSON parse failed for", base, e);
+      console.error("[DIAG] Raw weather response from", base, ":", raw);
       return null;
     }
   }
 
-  // 1) Primary API
   let data = await tryFetch("https://api.open-meteo.com");
   if (data) return data;
 
-  // 2) Backup domain
   data = await tryFetch("https://open-meteo.com");
   if (data) return data;
 
-  // 3) Final fallback
   console.error("[DIAG] All weather APIs failed — using safe fallback");
 
+  const nowIso = new Date().toISOString();
   return {
     current_weather: {
       temperature: 0,
       weathercode: 0,
       windspeed: 0,
-      time: new Date().toISOString()
+      time: nowIso
     },
     hourly: {
       temperature_2m: [0],
       relative_humidity_2m: [0],
       apparent_temperature: [0],
       cloudcover: [0],
-      time: [new Date().toISOString()]
+      time: [nowIso]
     },
     daily: {
       temperature_2m_max: [0],
       temperature_2m_min: [0],
       weather_code: [0],
       moon_phase: [0],
-      sunrise: [new Date().toISOString()],
-      sunset: [new Date().toISOString()]
+      sunrise: [nowIso],
+      sunset: [nowIso]
     },
     timezone: "UTC"
   };
+}
+
+// =========================================================
+// GEOCODER (PATCHED)
+// =========================================================
+async function geocodeCity(name) {
+  console.log("[DIAG] geocodeCity called with:", name);
+
+  const url =
+    "https://geocoding-api.open-meteo.com/v1/search" +
+    `?name=${encodeURIComponent(name)}` +
+    "&count=5&language=en&format=json";
+
+  console.log("[DIAG] GEOCODE URL:", url);
+
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    console.error("[DIAG] NETWORK ERROR fetching geocode:", e);
+    throw e;
+  }
+
+  console.log("[DIAG] Geocode response:", res.status, res.statusText);
+
+  const raw = await res.text();
+
+  try {
+    const json = JSON.parse(raw);
+    console.log("[DIAG] Geocode JSON:", json);
+    return json;
+  } catch (e) {
+    console.error("[DIAG] JSON parse failed in geocodeCity:", e);
+    console.error("[DIAG] Raw geocode response:", raw);
+    return { results: [] };
+  }
 }
 
 // =========================================================
@@ -237,6 +270,10 @@ function buildHourly(hourly, timezone) {
   console.log("[DIAG] buildHourly called");
   forecastEl.innerHTML = "";
   const units = getUnitParams();
+  if (!hourly || !hourly.time) {
+    console.warn("[DIAG] buildHourly: no hourly data");
+    return;
+  }
   for (let i = 0; i < 24 && i < hourly.time.length; i++) {
     const row = document.createElement("div");
     row.className = "forecast-hour";
@@ -253,6 +290,10 @@ function buildDaily(daily) {
   console.log("[DIAG] buildDaily called");
   dailyForecastEl.innerHTML = "";
   const units = getUnitParams();
+  if (!daily || !daily.time) {
+    console.warn("[DIAG] buildDaily: no daily data");
+    return;
+  }
   for (let i = 0; i < daily.time.length; i++) {
     const row = document.createElement("div");
     row.className = "daily-row";
@@ -343,18 +384,23 @@ function initToggles() {
 // =========================================================
 function pickShaderForTimeAndWeather(current, daily) {
   console.log("[DIAG] pickShaderForTimeAndWeather:", current, daily);
-  const now = new Date(current.time).getTime();
-  const sunrise = new Date(daily.sunrise[0]).getTime();
-  const sunset = new Date(daily.sunset[0]).getTime();
+  try {
+    const now = new Date(current.time).getTime();
+    const sunrise = new Date(daily.sunrise[0]).getTime();
+    const sunset = new Date(daily.sunset[0]).getTime();
 
-  let result;
-  if (now < sunrise + 45 * 60 * 1000) result = "sunrise";
-  else if (now > sunset - 45 * 60 * 1000) result = "sunset";
-  else if (now > sunset || now < sunrise) result = "night";
-  else result = "sunny";
+    let result;
+    if (now < sunrise + 45 * 60 * 1000) result = "sunrise";
+    else if (now > sunset - 45 * 60 * 1000) result = "sunset";
+    else if (now > sunset || now < sunrise) result = "night";
+    else result = "sunny";
 
-  console.log("[DIAG] pickShader result:", result);
-  return result;
+    console.log("[DIAG] pickShader result:", result);
+    return result;
+  } catch (e) {
+    console.error("[DIAG] pickShaderForTimeAndWeather error:", e);
+    return "sunny";
+  }
 }
 
 // =========================================================
@@ -496,26 +542,45 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
     const data = await fetchWeather(lat, lon);
     console.log("[DIAG] Weather data received:", data);
 
-    const current = data.current_weather;
-    const daily = data.daily;
-    const hourly = data.hourly;
+    const current = data.current_weather || {};
+    const daily = data.daily || {};
+    const hourly = data.hourly || {};
     const timezone = data.timezone || timezoneOverride || "UTC";
     const units = getUnitParams();
 
     cityNameEl.textContent = label;
-    localtimeEl.textContent = formatTime(current.time, timezone);
-    tempEl.textContent = `${Math.round(current.temperature)}${units.tempSymbol}`;
-    conditionEl.textContent = `Code ${current.weathercode}`;
-    humidityEl.textContent = `${Math.round(hourly.relative_humidity_2m[0])}%`;
-    windEl.textContent = `${Math.round(current.windspeed)} ${units.windSymbol}`;
-    feelsEl.textContent = `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`;
-    moonLabelEl.textContent = moonPhaseLabel(daily.moon_phase[0]);
+    localtimeEl.textContent = current.time ? formatTime(current.time, timezone) : "--:--";
+    tempEl.textContent =
+      typeof current.temperature === "number"
+        ? `${Math.round(current.temperature)}${units.tempSymbol}`
+        : `--${units.tempSymbol}`;
+    conditionEl.textContent = `Code ${current.weathercode ?? "--"}`;
+    humidityEl.textContent =
+      hourly.relative_humidity_2m && hourly.relative_humidity_2m.length
+        ? `${Math.round(hourly.relative_humidity_2m[0])}%`
+        : "--%";
+    windEl.textContent =
+      typeof current.windspeed === "number"
+        ? `${Math.round(current.windspeed)} ${units.windSymbol}`
+        : `-- ${units.windSymbol}`;
+    feelsEl.textContent =
+      hourly.apparent_temperature && hourly.apparent_temperature.length
+        ? `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`
+        : `--${units.tempSymbol}`;
+    moonLabelEl.textContent =
+      daily.moon_phase && daily.moon_phase.length
+        ? moonPhaseLabel(daily.moon_phase[0])
+        : "--";
 
     buildHourly(hourly, timezone);
     buildDaily(daily);
     setRadar(lat, lon);
 
-    currentWeatherAmount = Math.min(1, hourly.cloudcover[0] / 100);
+    if (hourly.cloudcover && hourly.cloudcover.length) {
+      currentWeatherAmount = Math.min(1, hourly.cloudcover[0] / 100);
+    } else {
+      currentWeatherAmount = 0.0;
+    }
     console.log("[DIAG] currentWeatherAmount:", currentWeatherAmount);
 
     const shaderName = pickShaderForTimeAndWeather(current, daily);
