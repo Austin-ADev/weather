@@ -282,6 +282,54 @@ function initSearch() {
   });
 }
 // =========================================================
+// FAVORITES SYSTEM
+// =========================================================
+const FAV_KEY = "weather_favorites";
+
+function loadFavorites() {
+  try {
+    return JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveFavorites(list) {
+  localStorage.setItem(FAV_KEY, JSON.stringify(list));
+}
+
+function renderFavorites(currentLabel) {
+  const list = loadFavorites();
+  const container = document.getElementById("favoritesList");
+  const favBtn = document.getElementById("favoriteToggle");
+  container.innerHTML = "";
+
+  list.forEach(label => {
+    const chip = document.createElement("div");
+    chip.className = "fav-chip" + (label === currentLabel ? " active" : "");
+    chip.textContent = label;
+    chip.addEventListener("click", () => setLocationByName(label));
+    container.appendChild(chip);
+  });
+
+  const isFav = list.includes(currentLabel);
+  favBtn.classList.toggle("active", isFav);
+  favBtn.textContent = isFav ? "★" : "☆";
+}
+
+function toggleFavorite(currentLabel) {
+  if (!currentLabel || currentLabel === "--") return;
+  let list = loadFavorites();
+  if (list.includes(currentLabel)) {
+    list = list.filter(x => x !== currentLabel);
+  } else {
+    list.push(currentLabel);
+  }
+  saveFavorites(list);
+  renderFavorites(currentLabel);
+}
+
+// =========================================================
 // FORECAST BUILDERS
 // =========================================================
 function buildHourly(hourly, timezone) {
