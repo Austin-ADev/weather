@@ -128,6 +128,11 @@ async function fetchWeather(lat, lon) {
     try {
       const json = JSON.parse(raw);
 
+      if (json.error) {
+        console.error("[DIAG] API error payload from", base, ":", json);
+        return null;
+      }
+
       if (!json.daily) json.daily = {};
       if (!Array.isArray(json.daily.moon_phase)) {
         console.warn("[DIAG] moon_phase missing or invalid, patching to [0]");
@@ -246,7 +251,6 @@ function initSearch() {
   let timeout = null;
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim();
-    console.log("[DIAG] search input:", q);
     if (timeout) clearTimeout(timeout);
     if (!q) {
       searchResults.style.display = "none";
@@ -259,7 +263,7 @@ function initSearch() {
       } catch (e) {
         console.error("[DIAG] Geocode error in initSearch:", e);
       }
-    }, 250);
+    }, 300);
   });
 }
 
@@ -385,6 +389,19 @@ function initToggles() {
 function pickShaderForTimeAndWeather(current, daily) {
   console.log("[DIAG] pickShaderForTimeAndWeather:", current, daily);
   try {
+    if (
+      !current ||
+      !current.time ||
+      !daily ||
+      !daily.sunrise ||
+      !daily.sunrise.length ||
+      !daily.sunset ||
+      !daily.sunset.length
+    ) {
+      console.warn("[DIAG] pickShader: missing time/sunrise/sunset, defaulting to sunny");
+      return "sunny";
+    }
+
     const now = new Date(current.time).getTime();
     const sunrise = new Date(daily.sunrise[0]).getTime();
     const sunset = new Date(daily.sunset[0]).getTime();
