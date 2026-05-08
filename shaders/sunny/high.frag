@@ -24,25 +24,23 @@ float mie(float cosTheta, float g) {
 }
 
 void main() {
-    vec2 uv = gl_FragCoord.xy / uResolution.xy;
 
     // ----------------------------------------------------
-    // TRUE ASPECT‑CORRECTED COORDINATES
+    // ASPECT‑CORRECTED WORLD COORDINATES (REAL FIX)
     // ----------------------------------------------------
-    // 1. Normalize to center
-    vec2 p = (gl_FragCoord.xy - 0.5 * uResolution.xy);
+    // 1. Move origin to center
+    vec2 p = gl_FragCoord.xy - 0.5 * uResolution.xy;
 
-    // 2. Divide by *min* dimension to keep circles circular
+    // 2. Normalize by MIN dimension (keeps circles circular)
     float scale = min(uResolution.x, uResolution.y);
     p /= scale;
 
-    // Now p.x and p.y are perfectly uniform.
-    // No stretching. No droplet. No axe head.
+    // p is now in perfect world‑space with no stretching.
 
     // ----------------------------------------------------
-    // FORCE MIDDAY ALWAYS
+    // UV for sky gradient only
     // ----------------------------------------------------
-    float day = 1.0;
+    vec2 uv = gl_FragCoord.xy / uResolution.xy;
 
     // ----------------------------------------------------
     // REALISTIC MIDDAY SKY COLORS
@@ -55,7 +53,7 @@ void main() {
     vec3 skyColor = mix(horizonColor, zenithColor, t);
 
     // ----------------------------------------------------
-    // SUN POSITION (shifted right)
+    // SUN POSITION (in UV space)
     // ----------------------------------------------------
     float timeSec = uTime;
     float period  = 5.0 * 3600.0;
@@ -64,7 +62,13 @@ void main() {
     float sunX = mix(0.05, 0.55, phase);
     float sunY = 0.40 + 0.20 * sin(phase * 3.14159);
 
-    vec2 sunPos = vec2(sunX, sunY);
+    // ----------------------------------------------------
+    // CONVERT SUN POSITION TO WORLD SPACE (MATCH p)
+    // ----------------------------------------------------
+    vec2 sunPos = vec2(
+        (sunX - 0.5) * (uResolution.x / scale),
+        (sunY - 0.5) * (uResolution.y / scale)
+    );
 
     // ----------------------------------------------------
     // DISTANCE TO SUN (now perfectly circular)
@@ -84,7 +88,7 @@ void main() {
     );
 
     // ----------------------------------------------------
-    // SUN DISC (smaller + golden)
+    // SUN DISC (golden, round)
     // ----------------------------------------------------
     float sunRadius = 0.08;
     float sunDisc   = smoothstep(sunRadius, sunRadius * 0.65, d);
