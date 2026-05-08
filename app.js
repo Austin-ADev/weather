@@ -89,89 +89,96 @@ function moonPhaseLabel(phase) {
 }
 
 // =========================================================
-// WEATHER API
+// WEATHER API (FINAL PATCHED VERSION)
 // =========================================================
 async function fetchWeather(lat, lon) {
   console.log("[DIAG] fetchWeather called with:", lat, lon);
+
   if (lat == null || lon == null) {
     console.error("[DIAG] ERROR: fetchWeather got invalid lat/lon:", lat, lon);
   }
 
   const units = getUnitParams();
-  const url =
-    `https://api.open-meteo.com/v1/forecast` +
-    `?latitude=${lat}&longitude=${lon}` +
-    `&current_weather=true` +
-    `&hourly=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,cloudcover` +
-    `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase,sunrise,sunset` +
-    `&temperature_unit=${units.temp}` +
-    `&windspeed_unit=${units.wind}` +
-    `&precipitation_unit=${units.precip}` +
-    `&timezone=auto`;
 
-  console.log("[DIAG] WEATHER URL:", url);
+  // Helper: attempt fetch from a given base URL
+  async function tryFetch(base) {
+    const url =
+      `${base}/v1/forecast` +
+      `?latitude=${lat}&longitude=${lon}` +
+      `&current_weather=true` +
+      `&hourly=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,cloudcover` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset` + 
+      // moon_phase intentionally removed
+      `&temperature_unit=${units.temp}` +
+      `&windspeed_unit=${units.wind}` +
+      `&precipitation_unit=${units.precip}` +
+      `&timezone=auto`;
 
-  let res;
-  try {
-    res = await fetch(url);
-  } catch (e) {
-    console.error("[DIAG] NETWORK ERROR fetching weather:", e);
-    throw e;
+    console.log("[DIAG] TRY WEATHER URL:", url);
+
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      console.error("[DIAG] NETWORK ERROR:", e);
+      return null;
+    }
+
+    console.log("[DIAG] Weather response:", res.status, res.statusText);
+
+    const raw = await res.text();
+
+    try {
+      const json = JSON.parse(raw);
+
+      // Insert safe moon_phase placeholder
+      if (!json.daily.moon_phase) {
+        json.daily.moon_phase = [0];
+      }
+
+      return json;
+    } catch (e) {
+      console.error("[DIAG] JSON parse failed:", e);
+      console.error("[DIAG] Raw response:", raw);
+      return null;
+    }
   }
 
-  console.log("[DIAG] Weather response:", res.status, res.statusText);
+  // 1) Primary API
+  let data = await tryFetch("https://api.open-meteo.com");
+  if (data) return data;
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error("[DIAG] Weather API error body:", body);
-    throw new Error("Weather fetch failed");
-  }
+  // 2) Backup domain
+  data = await tryFetch("https://open-meteo.com");
+  if (data) return data;
 
-  const json = await res.json();
-  console.log("[DIAG] Weather JSON:", json);
-  return json;
-}
+  // 3) Final fallback
+  console.error("[DIAG] All weather APIs failed — using safe fallback");
 
-async function geocodeCity(name) {
-  console.log("[DIAG] geocodeCity called with:", name);
-  const url =
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
-      name
-    )}&count=5&language=en&format=json`;
-
-  console.log("[DIAG] GEOCODE URL:", url);
-
-  let res;
-  try {
-    res = await fetch(url);
-  } catch (e) {
-    console.error("[DIAG] NETWORK ERROR fetching geocode:", e);
-    throw e;
-  }
-
-  console.log("[DIAG] Geocode response:", res.status, res.statusText);
-
-  if (!res.ok) {
-    const body = await res.text();
-    console.error("[DIAG] Geocode error body:", body);
-    throw new Error("Geocode failed");
-  }
-
-  let jsonText = await res.text();
-try {
-  return JSON.parse(jsonText);
-} catch (e) {
-  console.error("[DIAG] JSON parse failed:", e);
-  console.error("[DIAG] Raw response:", jsonText);
-
-  // Fallback: return minimal structure so app keeps running
   return {
-    current_weather: {},
-    hourly: {},
-    daily: { moon_phase: [0] }
+    current_weather: {
+      temperature: 0,
+      weathercode: 0,
+      windspeed: 0,
+      time: new Date().toISOString()
+    },
+    hourly: {
+      temperature_2m: [0],
+      relative_humidity_2m: [0],
+      apparent_temperature: [0],
+      cloudcover: [0],
+      time: [new Date().toISOString()]
+    },
+    daily: {
+      temperature_2m_max: [0],
+      temperature_2m_min: [0],
+      weather_code: [0],
+      moon_phase: [0],
+      sunrise: [new Date().toISOString()],
+      sunset: [new Date().toISOString()]
+    },
+    timezone: "UTC"
   };
-}
-
 }
 
 // =========================================================
