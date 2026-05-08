@@ -1,5 +1,5 @@
 // =========================================================
-// DIAGNOSTIC app.js — VERBOSE, STEP-BY-STEP LOGGING
+// DIAGNOSTIC
 // =========================================================
 console.log("%c[DIAG] app.js loaded", "color:#0ff;font-weight:bold;");
 
@@ -22,14 +22,13 @@ const radarFrame = document.getElementById("radarFrame");
 
 const hourlyToggle = document.getElementById("hourlyToggle");
 const dailyToggle = document.getElementById("dailyToggle");
-const radarToggle = document.getElementById("radarToggle");
 
 const searchInput = document.getElementById("citySearch");
 const searchResults = document.getElementById("searchResults");
 const unitToggleBtn = document.getElementById("unitToggle");
 
 // =========================================================
-// LOCATION MEMORY (for unit toggle)
+// LOCATION MEMORY
 // =========================================================
 let lastLocation = {
   label: null,
@@ -44,22 +43,18 @@ let lastLocation = {
 const UNIT_KEY = "weather_units";
 
 function getUnits() {
-  const u = localStorage.getItem(UNIT_KEY) || "us";
-  console.log("[DIAG] getUnits ->", u);
-  return u;
+  return localStorage.getItem(UNIT_KEY) || "us";
 }
+
 function setUnits(mode) {
-  console.log("[DIAG] setUnits:", mode);
   localStorage.setItem(UNIT_KEY, mode);
 }
+
 function getUnitParams() {
   const mode = getUnits();
-  const params =
-    mode === "metric"
-      ? { temp: "celsius", wind: "kmh", precip: "mm", tempSymbol: "°C", windSymbol: "km/h" }
-      : { temp: "fahrenheit", wind: "mph", precip: "inch", tempSymbol: "°F", windSymbol: "mph" };
-  console.log("[DIAG] getUnitParams ->", params);
-  return params;
+  return mode === "metric"
+    ? { temp: "celsius", wind: "kmh", precip: "mm", tempSymbol: "°C", windSymbol: "km/h" }
+    : { temp: "fahrenheit", wind: "mph", precip: "inch", tempSymbol: "°F", windSymbol: "mph" };
 }
 
 // =========================================================
@@ -100,18 +95,14 @@ const WEATHER_TEXT = {
 // TIME
 // =========================================================
 function formatTime(dateStr, timezone) {
-  console.log("[DIAG] formatTime:", dateStr, timezone);
   try {
     const d = new Date(dateStr);
-    const s = d.toLocaleString(undefined, {
+    return d.toLocaleString(undefined, {
       hour: "2-digit",
       minute: "2-digit",
       timeZone: timezone
     });
-    console.log("[DIAG] formatTime result:", s);
-    return s;
-  } catch (e) {
-    console.error("[DIAG] formatTime error:", e);
+  } catch {
     return "--:--";
   }
 }
@@ -120,8 +111,6 @@ function formatTime(dateStr, timezone) {
 // WEATHER API
 // =========================================================
 async function fetchWeather(lat, lon) {
-  console.log("[DIAG] fetchWeather called with:", lat, lon);
-
   const units = getUnitParams();
 
   const url =
@@ -135,33 +124,17 @@ async function fetchWeather(lat, lon) {
     `&precipitation_unit=${units.precip}` +
     `&timezone=auto`;
 
-  console.log("[DIAG] WEATHER URL:", url);
-
   let res;
   try {
     res = await fetch(url);
-  } catch (e) {
-    console.error("[DIAG] NETWORK ERROR:", e);
+  } catch {
     return null;
   }
 
-  console.log("[DIAG] Weather response:", res.status, res.statusText);
-
   const raw = await res.text();
-
   try {
-    const json = JSON.parse(raw);
-
-    if (json.error) {
-      console.error("[DIAG] API error payload:", json);
-      return null;
-    }
-
-    console.log("[DIAG] Weather JSON:", json);
-    return json;
-  } catch (e) {
-    console.error("[DIAG] JSON parse failed:", e);
-    console.error("[DIAG] Raw weather response:", raw);
+    return JSON.parse(raw);
+  } catch {
     return null;
   }
 }
@@ -170,40 +143,28 @@ async function fetchWeather(lat, lon) {
 // GEOCODER
 // =========================================================
 async function geocodeCity(name) {
-  console.log("[DIAG] geocodeCity called with:", name);
-
   const url =
     "https://geocoding-api.open-meteo.com/v1/search" +
     `?name=${encodeURIComponent(name)}` +
     "&count=5&language=en&format=json";
 
-  console.log("[DIAG] GEOCODE URL:", url);
-
   let res;
   try {
     res = await fetch(url);
-  } catch (e) {
-    console.error("[DIAG] NETWORK ERROR fetching geocode:", e);
+  } catch {
     return { results: [] };
   }
 
-  console.log("[DIAG] Geocode response:", res.status, res.statusText);
-
   const raw = await res.text();
-
   try {
-    const json = JSON.parse(raw);
-    console.log("[DIAG] Geocode JSON:", json);
-    return json;
-  } catch (e) {
-    console.error("[DIAG] JSON parse failed:", e);
-    console.error("[DIAG] Raw geocode response:", raw);
+    return JSON.parse(raw);
+  } catch {
     return { results: [] };
   }
 }
 
 // =========================================================
-// SEARCH UI — RECENT SEARCHES + RESULTS
+// RECENT SEARCHES
 // =========================================================
 const RECENT_KEY = "weather_recent_cities";
 const MAX_RECENT = 5;
@@ -234,45 +195,71 @@ function showRecentSearches() {
   list.forEach(label => {
     const item = document.createElement("div");
     item.className = "search-item";
-    item.textContent = label;
+    item.innerHTML = `<span>${label}</span><span class="search-star">☆</span>`;
     item.addEventListener("click", () => {
       searchInput.value = label;
       recentBox.style.display = "none";
       setLocationByName(label);
+    });
+    item.querySelector(".search-star").addEventListener("click", e => {
+      e.stopPropagation();
+      toggleFavorite(label);
     });
     recentBox.appendChild(item);
   });
   recentBox.style.display = "block";
 }
 
+// =========================================================
+// SEARCH RESULTS
+// =========================================================
 function showSearchResults(results) {
-  console.log("[DIAG] showSearchResults:", results);
   searchResults.innerHTML = "";
   if (!results?.results?.length) {
-    console.warn("[DIAG] No geocode results");
     searchResults.style.display = "none";
     return;
   }
+
   results.results.forEach(r => {
+    const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
     const item = document.createElement("div");
     item.className = "search-item";
-    const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
-    item.textContent = label;
+    item.innerHTML = `<span>${label}</span><span class="search-star">☆</span>`;
+
     item.addEventListener("click", () => {
-      console.log("[DIAG] Search item clicked:", label, r.latitude, r.longitude);
       searchResults.style.display = "none";
       document.getElementById("recentSearches").style.display = "none";
-      searchInput.value = label;
+      searchInput.value = "";
       setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
     });
+
+    item.querySelector(".search-star").addEventListener("click", e => {
+      e.stopPropagation();
+      toggleFavorite(label);
+    });
+
     searchResults.appendChild(item);
   });
+
   searchResults.style.display = "block";
 }
 
+// =========================================================
+// SEARCH INPUT HANDLER
+// =========================================================
 function initSearch() {
-  console.log("[DIAG] initSearch called");
   let timeout = null;
+
+  // ENTER clears search + loads city
+  searchInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      const q = searchInput.value.trim();
+      if (q) setLocationByName(q);
+      searchInput.value = "";
+      searchResults.style.display = "none";
+      document.getElementById("recentSearches").style.display = "none";
+    }
+  });
 
   searchInput.addEventListener("focus", () => {
     if (!searchInput.value.trim()) {
@@ -284,6 +271,7 @@ function initSearch() {
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim();
     const recentBox = document.getElementById("recentSearches");
+
     if (timeout) clearTimeout(timeout);
 
     if (!q) {
@@ -295,12 +283,8 @@ function initSearch() {
     recentBox.style.display = "none";
 
     timeout = setTimeout(async () => {
-      try {
-        const geo = await geocodeCity(q);
-        showSearchResults(geo);
-      } catch (e) {
-        console.error("[DIAG] Geocode error in initSearch:", e);
-      }
+      const geo = await geocodeCity(q);
+      showSearchResults(geo);
     }, 300);
   });
 
@@ -311,6 +295,7 @@ function initSearch() {
     }
   });
 }
+
 // =========================================================
 // FAVORITES SYSTEM
 // =========================================================
@@ -347,29 +332,28 @@ function renderFavorites(currentLabel) {
   favBtn.textContent = isFav ? "★" : "☆";
 }
 
-function toggleFavorite(currentLabel) {
-  if (!currentLabel || currentLabel === "--") return;
+function toggleFavorite(label) {
+  if (!label || label.trim() === "") return;
+
   let list = loadFavorites();
-  if (list.includes(currentLabel)) {
-    list = list.filter(x => x !== currentLabel);
+  if (list.includes(label)) {
+    list = list.filter(x => x !== label);
   } else {
-    list.push(currentLabel);
+    list.push(label);
   }
   saveFavorites(list);
-  renderFavorites(currentLabel);
+  renderFavorites(label);
 }
 
 // =========================================================
 // FORECAST BUILDERS
 // =========================================================
 function buildHourly(hourly, timezone) {
-  console.log("[DIAG] buildHourly called");
   forecastEl.innerHTML = "";
   const units = getUnitParams();
-  if (!hourly || !hourly.time) {
-    console.warn("[DIAG] buildHourly: no hourly data");
-    return;
-  }
+
+  if (!hourly || !hourly.time) return;
+
   for (let i = 0; i < 24 && i < hourly.time.length; i++) {
     const row = document.createElement("div");
     row.className = "forecast-hour";
@@ -383,13 +367,11 @@ function buildHourly(hourly, timezone) {
 }
 
 function buildDaily(daily) {
-  console.log("[DIAG] buildDaily called");
   dailyForecastEl.innerHTML = "";
   const units = getUnitParams();
-  if (!daily || !daily.time) {
-    console.warn("[DIAG] buildDaily: no daily data");
-    return;
-  }
+
+  if (!daily || !daily.time) return;
+
   for (let i = 0; i < daily.time.length; i++) {
     const row = document.createElement("div");
     row.className = "daily-row";
@@ -407,22 +389,18 @@ function buildDaily(daily) {
     dailyForecastEl.appendChild(row);
   }
 }
-
 // =========================================================
-// RADAR
+// RADAR ALWAYS VISIBLE
 // =========================================================
 function setRadar(lat, lon) {
-  console.log("[DIAG] setRadar:", lat, lon);
   radarFrame.src =
     `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&overlay=radar`;
 }
 
 // =========================================================
-// UNIT TOGGLE (PATCHED)
+// UNIT TOGGLE
 // =========================================================
 function initUnitToggle() {
-  console.log("[DIAG] initUnitToggle called");
-
   function updateLabel() {
     unitToggleBtn.textContent = getUnits() === "us" ? "US" : "Metric";
   }
@@ -431,12 +409,10 @@ function initUnitToggle() {
 
   unitToggleBtn.addEventListener("click", () => {
     const next = getUnits() === "us" ? "metric" : "us";
-    console.log("[DIAG] unitToggle clicked, new mode:", next);
     setUnits(next);
     updateLabel();
 
     if (lastLocation.label) {
-      console.log("[DIAG] Reloading lastLocation after unit change:", lastLocation);
       setLocationFromCoords(
         lastLocation.label,
         lastLocation.lat,
@@ -448,80 +424,24 @@ function initUnitToggle() {
 }
 
 // =========================================================
-// TOGGLES
+// TABS (NO HIDING — JUST HIGHLIGHT + SCROLL)
 // =========================================================
-function initToggles() {
-  console.log("[DIAG] initToggles called");
-
+function initTabs() {
   hourlyToggle.addEventListener("click", () => {
-    const isOpen = forecastEl.classList.toggle("open");
-    console.log("[DIAG] hourlyToggle clicked, open:", isOpen);
-    if (isOpen) {
-      dailyForecastEl.classList.remove("open");
-      radarFrame.style.display = "none";
-    }
+    hourlyToggle.classList.add("active");
+    dailyToggle.classList.remove("active");
+    forecastEl.scrollIntoView({ behavior: "smooth" });
   });
 
   dailyToggle.addEventListener("click", () => {
-    const isOpen = dailyForecastEl.classList.toggle("open");
-    console.log("[DIAG] dailyToggle clicked, open:", isOpen);
-    if (isOpen) {
-      forecastEl.classList.remove("open");
-      radarFrame.style.display = "none";
-    }
-  });
-
-  radarToggle.addEventListener("click", () => {
-    const showing = radarFrame.style.display === "block";
-    const next = !showing;
-    console.log("[DIAG] radarToggle clicked, showing:", next);
-    radarFrame.style.display = next ? "block" : "none";
-    if (next) {
-      forecastEl.classList.remove("open");
-      dailyForecastEl.classList.remove("open");
-    }
+    dailyToggle.classList.add("active");
+    hourlyToggle.classList.remove("active");
+    dailyForecastEl.scrollIntoView({ behavior: "smooth" });
   });
 }
 
 // =========================================================
-// SHADER SELECTION
-// =========================================================
-function pickShaderForTimeAndWeather(current, daily) {
-  console.log("[DIAG] pickShaderForTimeAndWeather:", current, daily);
-  try {
-    if (
-      !current ||
-      !current.time ||
-      !daily ||
-      !daily.sunrise ||
-      !daily.sunrise.length ||
-      !daily.sunset ||
-      !daily.sunset.length
-    ) {
-      console.warn("[DIAG] pickShader: missing time/sunrise/sunset, defaulting to sunny");
-      return "sunny";
-    }
-
-    const now = new Date(current.time).getTime();
-    const sunrise = new Date(daily.sunrise[0]).getTime();
-    const sunset = new Date(daily.sunset[0]).getTime();
-
-    let result;
-    if (now < sunrise + 45 * 60 * 1000) result = "sunrise";
-    else if (now > sunset - 45 * 60 * 1000) result = "sunset";
-    else if (now > sunset || now < sunrise) result = "night";
-    else result = "sunny";
-
-    console.log("[DIAG] pickShader result:", result);
-    return result;
-  } catch (e) {
-    console.error("[DIAG] pickShaderForTimeAndWeather error:", e);
-    return "sunny";
-  }
-}
-
-// =========================================================
-// WEBGL SKY
+// SHADER SYSTEM
 // =========================================================
 let gl;
 let program;
@@ -530,12 +450,7 @@ let currentShaderName = null;
 let currentWeatherAmount = 0.0;
 
 async function loadShaderSource(url) {
-  console.log("[DIAG] loadShaderSource:", url);
   const res = await fetch(url + "?v=" + Date.now());
-  console.log("[DIAG] Shader fetch status:", res.status, res.statusText);
-  if (!res.ok) {
-    console.error("[DIAG] Shader fetch failed:", url);
-  }
   return res.text();
 }
 
@@ -544,16 +459,14 @@ function createShader(gl, type, src) {
   gl.shaderSource(sh, src);
   gl.compileShader(sh);
   if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    console.error("[DIAG] Shader compile error:", gl.getShaderInfoLog(sh));
+    console.error(gl.getShaderInfoLog(sh));
     throw new Error("Shader compile failed");
   }
   return sh;
 }
 
 async function loadSkyShader(name) {
-  console.log("[DIAG] loadSkyShader:", name);
   const fragSrc = await loadShaderSource(`shaders/${name}.frag`);
-
   const vertSrc = `
     attribute vec2 aPos;
     void main() {
@@ -569,19 +482,11 @@ async function loadSkyShader(name) {
   gl.attachShader(prog, fs);
   gl.linkProgram(prog);
 
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    console.error("[DIAG] Program link error:", gl.getProgramInfoLog(prog));
-  }
-
   return prog;
 }
 
 async function switchShader(name) {
-  console.log("[DIAG] switchShader requested:", name);
-  if (name === currentShaderName) {
-    console.log("[DIAG] switchShader: already using", name);
-    return;
-  }
+  if (name === currentShaderName) return;
 
   const newProgram = await loadSkyShader(name);
   program = newProgram;
@@ -608,20 +513,12 @@ async function switchShader(name) {
   uResolutionLoc = gl.getUniformLocation(program, "uResolution");
   uWeatherLoc = gl.getUniformLocation(program, "uWeather");
 
-  console.log("[DIAG] Shader uniforms:", { uTimeLoc, uResolutionLoc, uWeatherLoc });
-
   currentShaderName = name;
 }
-// =========================================================
-// WEBGL SKY (continued)
-// =========================================================
+
 async function initSky() {
-  console.log("[DIAG] initSky called");
   gl = canvas.getContext("webgl", { antialias: true });
-  if (!gl) {
-    console.error("[DIAG] WebGL not supported");
-    return;
-  }
+  if (!gl) return;
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -629,7 +526,6 @@ async function initSky() {
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     gl.viewport(0, 0, canvas.width, canvas.height);
-    console.log("[DIAG] Canvas resized:", canvas.width, canvas.height);
   }
 
   window.addEventListener("resize", resize);
@@ -654,23 +550,10 @@ async function initSky() {
 // LOCATION HANDLING
 // =========================================================
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
-  console.log("[DIAG] setLocationFromCoords:", label, lat, lon, timezoneOverride);
-
-  // Save last location for unit toggle
-  lastLocation = {
-    label,
-    lat,
-    lon,
-    timezone: timezoneOverride || "UTC"
-  };
+  lastLocation = { label, lat, lon, timezone: timezoneOverride || "UTC" };
 
   const data = await fetchWeather(lat, lon);
-  console.log("[DIAG] Weather data received:", data);
-
-  if (!data) {
-    console.error("[DIAG] No weather data — aborting UI update");
-    return;
-  }
+  if (!data) return;
 
   const current = data.current_weather || {};
   const daily = data.daily || {};
@@ -686,11 +569,10 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       ? `${Math.round(current.temperature)}${units.tempSymbol}`
       : `--${units.tempSymbol}`;
 
-  const wc = current.weathercode;
-  conditionEl.textContent = WEATHER_TEXT[wc] || "Unknown";
+  conditionEl.textContent = WEATHER_TEXT[current.weathercode] || "Unknown";
 
   humidityEl.textContent =
-    hourly.relative_humidity_2m && hourly.relative_humidity_2m.length
+    hourly.relative_humidity_2m?.length
       ? `${Math.round(hourly.relative_humidity_2m[0])}%`
       : "--%";
 
@@ -700,25 +582,20 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       : `-- ${units.windSymbol}`;
 
   feelsEl.textContent =
-    hourly.apparent_temperature && hourly.apparent_temperature.length
+    hourly.apparent_temperature?.length
       ? `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`
       : `--${units.tempSymbol}`;
 
-  // Build UI sections
+  // Build UI
   buildHourly(hourly, timezone);
   buildDaily(daily);
   setRadar(lat, lon);
 
   // Shader cloud amount
-  if (hourly.cloudcover && hourly.cloudcover.length) {
-    currentWeatherAmount = Math.min(1, hourly.cloudcover[0] / 100);
-  } else {
-    currentWeatherAmount = 0.0;
-  }
+  currentWeatherAmount =
+    hourly.cloudcover?.length ? Math.min(1, hourly.cloudcover[0] / 100) : 0.0;
 
-  console.log("[DIAG] currentWeatherAmount:", currentWeatherAmount);
-
-  // Shader selection
+  // Pick shader
   const shaderName = pickShaderForTimeAndWeather(current, daily);
   await switchShader(shaderName);
 
@@ -730,43 +607,52 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
 }
 
 async function setLocationByName(name) {
-  console.log("[DIAG] setLocationByName:", name);
-
   const geo = await geocodeCity(name);
-  console.log("[DIAG] Geocode result:", geo);
-
-  if (!geo.results?.length) {
-    console.error("[DIAG] No geocode results for:", name);
-    return;
-  }
+  if (!geo.results?.length) return;
 
   const r = geo.results[0];
   const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
-
-  console.log("[DIAG] Using geocode:", label, r.latitude, r.longitude, r.timezone);
 
   setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
 }
 
 // =========================================================
-// MAIN
+// SHADER PICKER
+// =========================================================
+function pickShaderForTimeAndWeather(current, daily) {
+  try {
+    if (!current?.time || !daily?.sunrise?.length || !daily?.sunset?.length)
+      return "sunny";
+
+    const now = new Date(current.time).getTime();
+    const sunrise = new Date(daily.sunrise[0]).getTime();
+    const sunset = new Date(daily.sunset[0]).getTime();
+
+    if (now < sunrise + 45 * 60 * 1000) return "sunrise";
+    if (now > sunset - 45 * 60 * 1000) return "sunset";
+    if (now > sunset || now < sunrise) return "night";
+    return "sunny";
+  } catch {
+    return "sunny";
+  }
+}
+
+// =========================================================
+// MAIN INIT
 // =========================================================
 window.addEventListener("DOMContentLoaded", async () => {
-  console.log("%c[DIAG] DOMContentLoaded", "color:#0f0;font-weight:bold;");
-
   initSearch();
   initUnitToggle();
-  initToggles();
+  initTabs();
 
-  // Favorites button
   document.getElementById("favoriteToggle").addEventListener("click", () => {
     toggleFavorite(cityNameEl.textContent);
   });
+
   renderFavorites("");
 
   await initSky();
   await switchShader("sunny");
 
-  console.log("[DIAG] Loading default city: Indianapolis");
   setLocationByName("Indianapolis");
 });

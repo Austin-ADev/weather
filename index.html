@@ -8,19 +8,21 @@
 </head>
 
 <body>
+
   <!-- SHADER BACKGROUND -->
   <canvas id="sky"></canvas>
 
-  <!-- MAIN APP WRAPPER -->
+  <!-- MAIN APP -->
   <div class="app-container">
 
-    <!-- SEARCH + UNIT TOGGLE -->
+    <!-- TOP BAR -->
     <div class="top-bar">
+
       <div class="search-wrapper">
         <span class="search-icon">
-          <svg viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2" fill="none" />
-            <line x1="15" y1="15" x2="20" y2="20" stroke="currentColor" stroke-width="2" />
+          <svg width="18" height="18" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/>
+            <line x1="16" y1="16" x2="22" y2="22" stroke="currentColor" stroke-width="2"/>
           </svg>
         </span>
 
@@ -33,49 +35,48 @@
       <button id="unitToggle" class="unit-btn">US</button>
     </div>
 
-    <!-- FAVORITES BAR -->
+    <!-- FAVORITES -->
     <div class="favorites-bar">
       <div id="favoritesList" class="favorites-list"></div>
       <button id="favoriteToggle" class="fav-btn">☆</button>
     </div>
 
-    <!-- WEATHER CARD -->
-    <div class="weather-card">
+    <!-- MAIN CONTENT AREA -->
+    <div class="content-area">
 
-      <div class="header-block">
-        <div id="cityName" class="city-name">--</div>
-        <div id="localtime" class="local-time">--:--</div>
+      <!-- LEFT: WEATHER CARD -->
+      <div class="weather-card">
+
+        <div class="header-block">
+          <div id="cityName" class="city-name">--</div>
+          <div id="localtime" class="local-time">--:--</div>
+        </div>
+
+        <div class="current-main">
+          <div id="temp" class="temp">--°F</div>
+          <div id="condition" class="condition">--</div>
+        </div>
+
+        <div class="details">
+          <div>Humidity: <span id="humidity">--%</span></div>
+          <div>Wind: <span id="wind">-- mph</span></div>
+          <div>Feels Like: <span id="feels">--°F</span></div>
+        </div>
+
+        <div class="toggle-buttons">
+          <button id="hourlyToggle" class="tab-btn active">Next 24 Hours</button>
+          <button id="dailyToggle" class="tab-btn">Next 7 Days</button>
+        </div>
+
+        <div id="forecast" class="forecast-panel"></div>
+        <div id="dailyForecast" class="forecast-panel scrollable"></div>
+
       </div>
 
-      <div class="current-main">
-        <div id="temp" class="temp">--°F</div>
-        <div id="condition" class="condition">--</div>
-      </div>
-
-      <div class="details">
-        <div>Humidity: <span id="humidity">--%</span></div>
-        <div>Wind: <span id="wind">-- mph</span></div>
-        <div>Feels Like: <span id="feels">--°F</span></div>
-      </div>
-
-      <!-- TOGGLES -->
-      <div class="toggle-buttons">
-        <button id="hourlyToggle">Next 24 Hours</button>
-        <button id="dailyToggle">Next 7 Days</button>
-        <button id="radarToggle">Radar</button>
-      </div>
-
-      <!-- HOURLY FORECAST -->
-      <div id="forecast" class="forecast-panel"></div>
-
-      <!-- DAILY FORECAST -->
-      <div id="dailyForecast" class="forecast-panel"></div>
-
-      <!-- RADAR -->
+      <!-- RIGHT: RADAR ALWAYS VISIBLE -->
       <iframe
         id="radarFrame"
         class="radar-frame"
-        style="display:none;"
         loading="lazy">
       </iframe>
 
