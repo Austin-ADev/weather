@@ -1,162 +1,165 @@
-/* -------------------------------------------------------
-   GLOBAL
-------------------------------------------------------- */
-body {
+* {
+  box-sizing: border-box;
   margin: 0;
-  overflow: hidden;
-  background: #000;
-  font-family: system-ui, sans-serif;
-  color: white;
-  position: relative; /* Required for stacking context */
+  padding: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
 }
 
-/* -------------------------------------------------------
-   SKY CANVAS (always behind everything)
-------------------------------------------------------- */
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: #000;
+}
+
 #sky {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   display: block;
-  z-index: 0;
-  transition: opacity 0.4s ease;
-  background: transparent !important;
 }
 
-#sky.fade-out {
-  opacity: 0;
-}
-
-/* -------------------------------------------------------
-   CENTERED PANEL (floating glass card)
-------------------------------------------------------- */
-#panel {
-  position: fixed;
+.panel {
+  position: absolute;
   top: 50%;
   left: 50%;
-  width: 380px;
-  height: auto;
   transform: translate(-50%, -50%);
-  z-index: 10;
-
-  background: rgba(0,0,0,0.45);
-  backdrop-filter: blur(12px);
-  padding: 20px;
-  box-sizing: border-box;
-  border-radius: 12px;
-
-  max-height: 90vh;
-  overflow-y: auto;
+  width: 360px;
+  padding: 16px 18px 18px;
+  border-radius: 16px;
+  background: rgba(10, 16, 30, 0.72);
+  backdrop-filter: blur(18px);
+  color: #f5f7ff;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
 }
 
-/* -------------------------------------------------------
-   TOP BAR
-------------------------------------------------------- */
-#topBar {
+.top-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 #citySearch {
   flex: 1;
-  padding: 8px;
-  border-radius: 6px;
-  border: none;
-  outline: none;
-  background: rgba(255,255,255,0.1);
-  color: white;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.25);
+  color: #f5f7ff;
 }
 
-#detectLocation,
-.unit-toggle {
+#citySearch::placeholder {
+  color: rgba(230, 235, 255, 0.6);
+}
+
+#unitToggle {
   padding: 8px 12px;
-  border-radius: 6px;
-  border: none;
-  background: rgba(255,255,255,0.15);
-  color: white;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.4);
+  color: #f5f7ff;
   cursor: pointer;
 }
 
-/* -------------------------------------------------------
-   SEARCH RESULTS
-------------------------------------------------------- */
-#searchResults {
-  background: rgba(0,0,0,0.6);
-  border-radius: 6px;
+.search-results {
+  position: relative;
+  margin-top: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  border-radius: 10px;
+  background: rgba(5, 10, 25, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   display: none;
-  margin-bottom: 12px;
 }
 
 .search-item {
-  padding: 8px;
+  padding: 6px 10px;
   cursor: pointer;
+  font-size: 13px;
 }
 
 .search-item:hover {
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.06);
 }
 
-/* -------------------------------------------------------
-   CURRENT WEATHER
-------------------------------------------------------- */
-#current {
-  margin-bottom: 20px;
-  text-align: center;
+.current {
+  margin-top: 8px;
 }
 
-#cityName {
-  font-size: 28px;
-  font-weight: bold;
+.city {
+  font-size: 18px;
+  font-weight: 600;
 }
 
-#temp {
-  font-size: 48px;
-  margin: 10px 0;
+.time {
+  font-size: 13px;
+  opacity: 0.8;
 }
 
-.row {
-  display: flex;
-  justify-content: space-between;
-  margin: 4px 0;
+.condition {
+  margin-top: 4px;
+  font-size: 14px;
 }
 
-/* -------------------------------------------------------
-   SECTION TOGGLES
-------------------------------------------------------- */
-.sectionToggle {
-  margin-top: 20px;
-  padding: 10px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 6px;
-  cursor: pointer;
-  text-align: center;
+.temp {
+  margin-top: 6px;
+  font-size: 32px;
+  font-weight: 600;
 }
 
-/* -------------------------------------------------------
-   FORECAST SECTIONS
-------------------------------------------------------- */
-#forecast,
-#dailyForecast {
+.meta {
+  margin-top: 6px;
+  font-size: 12px;
+  display: grid;
+  gap: 2px;
+}
+
+.buttons {
   margin-top: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.buttons button {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: #f5f7ff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.forecast {
+  margin-top: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 12px;
+  display: none;
+}
+
+.forecast.open {
+  display: block;
 }
 
 .forecast-hour,
 .daily-row {
   display: flex;
   justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* -------------------------------------------------------
-   RADAR
-------------------------------------------------------- */
-#radarFrame {
-  width: 100%;
-  height: 300px;
-  border: none;
+.radar {
   margin-top: 10px;
-  border-radius: 8px;
+  width: 100%;
+  height: 200px;
+  border-radius: 12px;
+  border: none;
 }

@@ -2,51 +2,43 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Weather</title>
+  <title>Weather v2</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
   <canvas id="sky"></canvas>
 
-  <div id="panel">
-    <div id="topBar">
-      <input id="citySearch" placeholder="Search city…" autocomplete="off" />
-      <button id="detectLocation">📍</button>
-      <button id="unitToggle" class="unit-toggle">US</button>
+  <div class="panel">
+    <div class="top-row">
+      <input id="citySearch" placeholder="Search city..." autocomplete="off" />
+      <button id="unitToggle">US</button>
     </div>
+    <div id="searchResults" class="search-results"></div>
 
-    <div id="searchResults"></div>
-
-    <div id="current">
-      <div id="cityName">--</div>
-      <div id="localtime">--:--</div>
-      <div id="moonLabel">Moon</div>
-      <div id="temp">--°F</div>
-      <div id="condition">--</div>
-
-      <div class="row">
-        <span>Humidity:</span><span id="humidity">--%</span>
-      </div>
-      <div class="row">
-        <span>Wind:</span><span id="wind">-- mph</span>
-      </div>
-      <div class="row">
-        <span>Feels Like:</span><span id="feels">--°F</span>
+    <div class="current">
+      <div class="city" id="cityName">--</div>
+      <div class="time" id="localtime">--:--</div>
+      <div class="condition" id="condition">--</div>
+      <div class="temp" id="temp">--°F</div>
+      <div class="meta">
+        <span>Humidity: <span id="humidity">--%</span></span>
+        <span>Wind: <span id="wind">-- mph</span></span>
+        <span>Feels Like: <span id="feels">--°F</span></span>
+        <span>Moon: <span id="moonLabel">--</span></span>
       </div>
     </div>
 
-    <div id="hourlyToggle" class="sectionToggle">Next 24 Hours</div>
-    <div id="forecast"></div>
+    <div class="buttons">
+      <button id="hourlyToggle">Next 24 Hours</button>
+      <button id="dailyToggle">Next 7 Days</button>
+      <button id="radarToggle">Radar</button>
+    </div>
 
-    <div class="sectionToggle">Next 7 Days</div>
-    <div id="dailyForecast"></div>
-
-    <div class="sectionToggle">Radar</div>
-    <iframe id="radarFrame"></iframe>
+    <div id="forecast" class="forecast"></div>
+    <div id="dailyForecast" class="forecast"></div>
+    <iframe id="radarFrame" class="radar" style="display:none;"></iframe>
   </div>
 
-  <script type="module" src="app.js?v=1000000"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

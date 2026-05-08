@@ -1,36 +1,46 @@
 // app.js
-import { Sky } from "./sky/sky.js";
-import { WeatherEngine } from "./sky/weatherEngine.js";
 
-/* -------------------------------------------------------
-   LOGGING
-------------------------------------------------------- */
+/* ---------------- LOGGING ---------------- */
 const log = {
-  app: (...msg) => console.log("%c[APP]", "color:#4af", ...msg),
-  fetch: (...msg) => console.log("%c[FETCH]", "color:#f66", ...msg),
-  search: (...msg) => console.log("%c[SEARCH]", "color:#9cf", ...msg),
-  sky: (...msg) => console.log("%c[SKY]", "color:#6f6", ...msg),
-  radar: (...msg) => console.log("%c[RADAR]", "color:#fc9", ...msg)
+  app: (...m) => console.log("%c[APP]", "color:#4af", ...m),
+  fetch: (...m) => console.log("%c[FETCH]", "color:#f66", ...m),
+  search: (...m) => console.log("%c[SEARCH]", "color:#9cf", ...m)
 };
 
-let firstLoad = true;
+/* ---------------- DOM ---------------- */
+const canvas = document.getElementById("sky");
+const cityNameEl = document.getElementById("cityName");
+const localtimeEl = document.getElementById("localtime");
+const conditionEl = document.getElementById("condition");
+const tempEl = document.getElementById("temp");
+const humidityEl = document.getElementById("humidity");
+const windEl = document.getElementById("wind");
+const feelsEl = document.getElementById("feels");
+const moonLabelEl = document.getElementById("moonLabel");
 
-/* -------------------------------------------------------
-   UNIT SYSTEM
-------------------------------------------------------- */
+const forecastEl = document.getElementById("forecast");
+const dailyForecastEl = document.getElementById("dailyForecast");
+const radarFrame = document.getElementById("radarFrame");
+
+const hourlyToggle = document.getElementById("hourlyToggle");
+const dailyToggle = document.getElementById("dailyToggle");
+const radarToggle = document.getElementById("radarToggle");
+
+const searchInput = document.getElementById("citySearch");
+const searchResults = document.getElementById("searchResults");
+const unitToggleBtn = document.getElementById("unitToggle");
+
+/* ---------------- UNITS ---------------- */
 const UNIT_KEY = "weather_units";
 
 function getUnits() {
   return localStorage.getItem(UNIT_KEY) || "us";
 }
-
 function setUnits(mode) {
   localStorage.setItem(UNIT_KEY, mode);
 }
-
 function getUnitParams() {
   const mode = getUnits();
-
   if (mode === "metric") {
     return {
       temp: "celsius",
@@ -40,7 +50,6 @@ function getUnitParams() {
       windSymbol: "km/h"
     };
   }
-
   return {
     temp: "fahrenheit",
     wind: "mph",
@@ -50,92 +59,7 @@ function getUnitParams() {
   };
 }
 
-/* -------------------------------------------------------
-   DOM ELEMENTS
-------------------------------------------------------- */
-const skyCanvas = document.getElementById("sky");
-
-const cityNameEl = document.getElementById("cityName");
-const localtimeEl = document.getElementById("localtime");
-const moonLabelEl = document.getElementById("moonLabel");
-const tempEl = document.getElementById("temp");
-const conditionEl = document.getElementById("condition");
-const humidityEl = document.getElementById("humidity");
-const windEl = document.getElementById("wind");
-const feelsEl = document.getElementById("feels");
-
-const forecastEl = document.getElementById("forecast");
-const dailyForecastEl = document.getElementById("dailyForecast");
-const radarFrame = document.getElementById("radarFrame");
-
-const hourlyToggle = document.getElementById("hourlyToggle");
-const searchInput = document.getElementById("citySearch");
-const searchResults = document.getElementById("searchResults");
-const detectLocationBtn = document.getElementById("detectLocation");
-const unitToggleBtn = document.getElementById("unitToggle");
-
-/* -------------------------------------------------------
-   WEBGL INIT
-------------------------------------------------------- */
-log.app("Initializing WebGL…");
-let gl = null;
-
-function safeResizeCanvas() {
-  if (!gl) return; // <-- FIX: prevent crash before GL exists
-  const dpr = window.devicePixelRatio || 1;
-  const rect = skyCanvas.getBoundingClientRect();
-  skyCanvas.width = rect.width * dpr;
-  skyCanvas.height = rect.height * dpr;
-  gl.viewport(0, 0, skyCanvas.width, skyCanvas.height);
-}
-
-/* -------------------------------------------------------
-   GPU TIER DETECTION
-------------------------------------------------------- */
-function detectTier() {
-  const testCanvas = document.createElement("canvas");
-  const testGl = testCanvas.getContext("webgl");
-  if (!testGl) return "low";
-
-  const ext = testGl.getExtension("WEBGL_debug_renderer_info");
-  let renderer = ext
-    ? testGl.getParameter(ext.UNMASKED_RENDERER_WEBGL).toLowerCase()
-    : "unknown";
-
-  const dedicated = [
-    "nvidia", "geforce", "rtx", "gtx",
-    "radeon", "rx", "arc", "quadro",
-    "m1 pro", "m1 max", "m2 pro", "m2 max"
-  ];
-
-  return dedicated.some(k => renderer.includes(k)) ? "high" : "low";
-}
-
-const gpuTier = detectTier();
-log.app("GPU Tier:", gpuTier);
-
-/* -------------------------------------------------------
-   FADE HELPERS
-------------------------------------------------------- */
-function fadeOutSky() {
-  skyCanvas.classList.add("fade-out");
-}
-function fadeInSky() {
-  skyCanvas.classList.remove("fade-out");
-}
-
-/* -------------------------------------------------------
-   RADAR
-------------------------------------------------------- */
-function setRadar(lat, lon) {
-  log.radar("Updating radar:", { lat, lon });
-  radarFrame.src =
-    `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&overlay=radar`;
-}
-
-/* -------------------------------------------------------
-   TIME HELPERS
-------------------------------------------------------- */
+/* ---------------- TIME / MOON ---------------- */
 function formatTime(dateStr, timezone) {
   try {
     const d = new Date(dateStr);
@@ -149,25 +73,6 @@ function formatTime(dateStr, timezone) {
   }
 }
 
-function getLocalHour(dateStr, timezone) {
-  try {
-    const d = new Date(dateStr);
-    return parseInt(
-      d.toLocaleString("en-US", {
-        hour: "2-digit",
-        hour12: false,
-        timeZone: timezone
-      }),
-      10
-    );
-  } catch {
-    return 12;
-  }
-}
-
-/* -------------------------------------------------------
-   MOON PHASE LABEL
-------------------------------------------------------- */
 function moonPhaseLabel(phase) {
   if (phase < 0.03 || phase > 0.97) return "New Moon";
   if (phase < 0.22) return "Waxing Crescent";
@@ -179,86 +84,9 @@ function moonPhaseLabel(phase) {
   return "Waning Crescent";
 }
 
-/* -------------------------------------------------------
-   WEATHER → SHADER MAPPING
-------------------------------------------------------- */
-function mapWeatherType(code, isNight) {
-  if (isNight) {
-    if ([95, 96, 99].includes(code)) return "nightStorm";
-    if ([2, 3].includes(code)) return "nightCloudy";
-    return "night";
-  }
-
-  if (code === 0) return "sunny";
-  if (code === 1) return "mostlyClear";
-  if (code === 2) return "partlyCloudy";
-  if (code === 3) return "cloudy";
-
-  if ([45, 48].includes(code)) return "fog";
-  if ([51, 53, 55, 56, 57].includes(code)) return "drizzle";
-  if ([61, 63, 66].includes(code)) return "rain";
-  if ([65, 67].includes(code)) return "heavyRain";
-  if ([80, 81, 82].includes(code)) return "showers";
-  if ([71, 73, 77].includes(code)) return "snow";
-  if ([75].includes(code)) return "heavySnow";
-  if ([85, 86].includes(code)) return "snowShowers";
-  if ([95, 96, 99].includes(code)) return "storm";
-
-  return isNight ? "night" : "cloudy";
-}
-
-/* -------------------------------------------------------
-   FORECAST BUILDERS
-------------------------------------------------------- */
-function buildHourly(hourly, timezone) {
-  forecastEl.innerHTML = "";
-  const units = getUnitParams();
-
-  for (let i = 0; i < 24; i++) {
-    const row = document.createElement("div");
-    row.className = "forecast-hour";
-
-    row.innerHTML = `
-      <div>${formatTime(hourly.time[i], timezone)}</div>
-      <div>${Math.round(hourly.temperature_2m[i])}${units.tempSymbol}</div>
-      <div>${WeatherEngine.describe(hourly.weather_code[i])}</div>
-    `;
-
-    forecastEl.appendChild(row);
-  }
-}
-
-function buildDaily(daily) {
-  dailyForecastEl.innerHTML = "";
-  const units = getUnitParams();
-
-  for (let i = 0; i < daily.time.length; i++) {
-    const row = document.createElement("div");
-    row.className = "daily-row";
-
-    const date = new Date(daily.time[i]).toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric"
-    });
-
-    row.innerHTML = `
-      <div>${date}</div>
-      <div>${Math.round(daily.temperature_2m_max[i])}${units.tempSymbol} / 
-           ${Math.round(daily.temperature_2m_min[i])}${units.tempSymbol}</div>
-      <div>${WeatherEngine.describe(daily.weather_code[i])}</div>
-    `;
-
-    dailyForecastEl.appendChild(row);
-  }
-}
-
-/* -------------------------------------------------------
-   API: WEATHER
-------------------------------------------------------- */
+/* ---------------- API ---------------- */
 async function fetchWeather(lat, lon) {
   const units = getUnitParams();
-
   const url =
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lon}` +
@@ -270,83 +98,54 @@ async function fetchWeather(lat, lon) {
     `&precipitation_unit=${units.precip}` +
     `&timezone=auto`;
 
-  log.fetch("Fetching weather:", url);
-
+  log.fetch("Weather:", url);
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather fetch failed");
-
   return res.json();
 }
 
-/* -------------------------------------------------------
-   API: GEOCODING
-------------------------------------------------------- */
 async function geocodeCity(name) {
   const url =
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
       name
     )}&count=5&language=en&format=json`;
-
-  log.search("Geocoding:", url);
-
+  log.search("Geocode:", url);
   const res = await fetch(url);
   if (!res.ok) throw new Error("Geocode failed");
-
   return res.json();
 }
 
-/* -------------------------------------------------------
-   SEARCH UI
-------------------------------------------------------- */
+/* ---------------- SEARCH UI ---------------- */
 function showSearchResults(results) {
   searchResults.innerHTML = "";
-
   if (!results?.results?.length) {
     searchResults.style.display = "none";
     return;
   }
-
   results.results.forEach(r => {
     const item = document.createElement("div");
     item.className = "search-item";
-
     const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
     item.textContent = label;
-
     item.addEventListener("click", () => {
       searchResults.style.display = "none";
       searchInput.value = label;
       setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
     });
-
     searchResults.appendChild(item);
   });
-
   searchResults.style.display = "block";
-}
-
-async function setLocationByName(name) {
-  const geo = await geocodeCity(name);
-  if (!geo.results?.length) return;
-
-  const r = geo.results[0];
-  const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
-
-  setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
 }
 
 function initSearch() {
   let timeout = null;
-
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim();
     if (timeout) clearTimeout(timeout);
-
     if (!q) {
       searchResults.style.display = "none";
       return;
     }
-
     timeout = setTimeout(async () => {
       const geo = await geocodeCity(q);
       showSearchResults(geo);
@@ -354,71 +153,59 @@ function initSearch() {
   });
 }
 
-/* -------------------------------------------------------
-   APPLY WEATHER TO UI
-------------------------------------------------------- */
-async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
-
-  if (!firstLoad) fadeOutSky();
-  firstLoad = false;
-
-  setTimeout(async () => {
-    try {
-      const data = await fetchWeather(lat, lon);
-
-      const current = data.current_weather;
-      const daily = data.daily;
-      const hourly = data.hourly;
-      const timezone = data.timezone || timezoneOverride || "UTC";
-
-      const units = getUnitParams();
-
-      const code = current.weathercode;
-      const hour = getLocalHour(current.time, timezone);
-      const isNight = hour < 6 || hour >= 20;
-      const weatherType = "sunny";
-
-      WeatherEngine.setFromAPI(label, code);
-
-      cityNameEl.textContent = label;
-      localtimeEl.textContent = formatTime(current.time, timezone);
-      tempEl.textContent = `${Math.round(current.temperature)}${units.tempSymbol}`;
-      conditionEl.textContent = WeatherEngine.describe(code);
-
-      humidityEl.textContent = `${Math.round(hourly.relative_humidity_2m[0])}%`;
-      windEl.textContent = `${Math.round(current.windspeed)} ${units.windSymbol}`;
-      feelsEl.textContent = `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`;
-
-      moonLabelEl.textContent = moonPhaseLabel(daily.moon_phase[0]);
-
-      buildHourly(hourly, timezone);
-      buildDaily(daily);
-      setRadar(lat, lon);
-
-      await Sky.setWeatherShader(weatherType, gpuTier);
-    } catch (e) {
-      log.app("Weather error:", e);
-    } finally {
-      fadeInSky();
-    }
-  }, 250);
+/* ---------------- FORECAST BUILDERS ---------------- */
+function buildHourly(hourly, timezone) {
+  forecastEl.innerHTML = "";
+  const units = getUnitParams();
+  for (let i = 0; i < 24; i++) {
+    const row = document.createElement("div");
+    row.className = "forecast-hour";
+    row.innerHTML = `
+      <div>${formatTime(hourly.time[i], timezone)}</div>
+      <div>${Math.round(hourly.temperature_2m[i])}${units.tempSymbol}</div>
+      <div>${hourly.weather_code[i]}</div>
+    `;
+    forecastEl.appendChild(row);
+  }
 }
 
-/* -------------------------------------------------------
-   UNIT TOGGLE
-------------------------------------------------------- */
+function buildDaily(daily) {
+  dailyForecastEl.innerHTML = "";
+  const units = getUnitParams();
+  for (let i = 0; i < daily.time.length; i++) {
+    const row = document.createElement("div");
+    row.className = "daily-row";
+    const date = new Date(daily.time[i]).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric"
+    });
+    row.innerHTML = `
+      <div>${date}</div>
+      <div>${Math.round(daily.temperature_2m_max[i])}${units.tempSymbol} /
+           ${Math.round(daily.temperature_2m_min[i])}${units.tempSymbol}</div>
+      <div>${daily.weather_code[i]}</div>
+    `;
+    dailyForecastEl.appendChild(row);
+  }
+}
+
+/* ---------------- RADAR ---------------- */
+function setRadar(lat, lon) {
+  radarFrame.src =
+    `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&overlay=radar`;
+}
+
+/* ---------------- UNIT TOGGLE ---------------- */
 function initUnitToggle() {
   function updateLabel() {
     unitToggleBtn.textContent = getUnits() === "us" ? "US" : "Metric";
   }
-
   updateLabel();
-
   unitToggleBtn.addEventListener("click", () => {
     const next = getUnits() === "us" ? "metric" : "us";
     setUnits(next);
     updateLabel();
-
     const label = cityNameEl.textContent;
     if (label && label !== "--") {
       setLocationByName(label);
@@ -426,60 +213,165 @@ function initUnitToggle() {
   });
 }
 
-/* -------------------------------------------------------
-   HOURLY TOGGLE
-------------------------------------------------------- */
-function initHourlyToggle() {
+/* ---------------- TOGGLES ---------------- */
+function initToggles() {
   hourlyToggle.addEventListener("click", () => {
     forecastEl.classList.toggle("open");
-    hourlyToggle.classList.toggle("open");
+    dailyForecastEl.classList.remove("open");
+    radarFrame.style.display = "none";
+  });
+  dailyToggle.addEventListener("click", () => {
+    dailyForecastEl.classList.toggle("open");
+    forecastEl.classList.remove("open");
+    radarFrame.style.display = "none";
+  });
+  radarToggle.addEventListener("click", () => {
+    radarFrame.style.display =
+      radarFrame.style.display === "none" ? "block" : "none";
+    forecastEl.classList.remove("open");
+    dailyForecastEl.classList.remove("open");
   });
 }
 
-/* -------------------------------------------------------
-   GEOLOCATION
-------------------------------------------------------- */
-function initDetectLocation() {
-  detectLocationBtn.addEventListener("click", () => {
-    if (!navigator.geolocation) return;
+/* ---------------- LOCATION ---------------- */
+async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
+  try {
+    const data = await fetchWeather(lat, lon);
+    const current = data.current_weather;
+    const daily = data.daily;
+    const hourly = data.hourly;
+    const timezone = data.timezone || timezoneOverride || "UTC";
+    const units = getUnitParams();
 
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const { latitude, longitude } = pos.coords;
-        setLocationFromCoords("My Location", latitude, longitude);
-      },
-      err => log.app("Geolocation error:", err)
-    );
-  });
+    cityNameEl.textContent = label;
+    localtimeEl.textContent = formatTime(current.time, timezone);
+    tempEl.textContent = `${Math.round(current.temperature)}${units.tempSymbol}`;
+    conditionEl.textContent = `Code ${current.weathercode}`;
+    humidityEl.textContent = `${Math.round(hourly.relative_humidity_2m[0])}%`;
+    windEl.textContent = `${Math.round(current.windspeed)} ${units.windSymbol}`;
+    feelsEl.textContent = `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`;
+    moonLabelEl.textContent = moonPhaseLabel(daily.moon_phase[0]);
+
+    buildHourly(hourly, timezone);
+    buildDaily(daily);
+    setRadar(lat, lon);
+  } catch (e) {
+    log.app("Weather error:", e);
+  }
 }
 
-/* -------------------------------------------------------
-   MAIN
-------------------------------------------------------- */
-(async () => {
-  log.sky("Sky.init() starting");
+async function setLocationByName(name) {
+  const geo = await geocodeCity(name);
+  if (!geo.results?.length) return;
+  const r = geo.results[0];
+  const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
+  setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
+}
 
-  // Initialize WebGL FIRST
-  gl = skyCanvas.getContext("webgl", { antialias: true });
+/* ---------------- WEBGL: SUNNY SKY ---------------- */
+let gl;
+let program;
+let uTimeLoc, uResolutionLoc;
+let startTime = performance.now();
 
-  // Now safe to bind resize handler
-  window.addEventListener("resize", safeResizeCanvas);
-  safeResizeCanvas();
+async function loadShaderSource(url) {
+  const res = await fetch(url);
+  return res.text();
+}
 
-  await Sky.init(gl, gpuTier);
-  log.sky("Sky.init() complete");
+function createShader(gl, type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(sh));
+    gl.deleteShader(sh);
+    return null;
+  }
+  return sh;
+}
 
-  initSearch();
-  initHourlyToggle();
-  initDetectLocation();
-  initUnitToggle();
+async function initSky() {
+  gl = canvas.getContext("webgl", { antialias: true });
+  if (!gl) {
+    console.error("WebGL not supported");
+    return;
+  }
 
-  log.app("Initial location: Indianapolis");
-  setLocationByName("Indianapolis");
+  const vertSrc = `
+    attribute vec2 aPos;
+    void main() {
+      gl_Position = vec4(aPos, 0.0, 1.0);
+    }
+  `;
+
+  const fragSrc = await loadShaderSource("shaders/sunny.frag");
+
+  const vs = createShader(gl, gl.VERTEX_SHADER, vertSrc);
+  const fs = createShader(gl, gl.FRAGMENT_SHADER, fragSrc);
+
+  program = gl.createProgram();
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error(gl.getProgramInfoLog(program));
+    return;
+  }
+
+  gl.useProgram(program);
+
+  const quad = new Float32Array([
+    -1, -1,
+     1, -1,
+    -1,  1,
+    -1,  1,
+     1, -1,
+     1,  1
+  ]);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+
+  const aPosLoc = gl.getAttribLocation(program, "aPos");
+  gl.enableVertexAttribArray(aPosLoc);
+  gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
+
+  uTimeLoc = gl.getUniformLocation(program, "uTime");
+  uResolutionLoc = gl.getUniformLocation(program, "uResolution");
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  window.addEventListener("resize", resize);
+  resize();
 
   function frame() {
-    Sky.update();
+    const now = performance.now();
+    const t = (now - startTime) / 1000.0;
+
+    gl.useProgram(program);
+    gl.uniform1f(uTimeLoc, t);
+    gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(frame);
   }
   frame();
+}
+
+/* ---------------- MAIN ---------------- */
+(async () => {
+  initSearch();
+  initUnitToggle();
+  initToggles();
+  await initSky();
+
+  log.app("Initial location: Indianapolis");
+  setLocationByName("Indianapolis");
 })();
