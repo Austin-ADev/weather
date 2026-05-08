@@ -63,6 +63,50 @@ function getUnitParams() {
 }
 
 // =========================================================
+// WEATHER CODE → HUMAN TEXT
+// =========================================================
+const WEATHER_TEXT = {
+  0: "Clear Sky",
+  1: "Mainly Clear",
+  2: "Partly Cloudy",
+  3: "Overcast",
+
+  45: "Fog",
+  48: "Depositing Rime Fog",
+
+  51: "Light Drizzle",
+  53: "Moderate Drizzle",
+  55: "Dense Drizzle",
+
+  56: "Freezing Drizzle",
+  57: "Freezing Drizzle (Dense)",
+
+  61: "Light Rain",
+  63: "Moderate Rain",
+  65: "Heavy Rain",
+
+  66: "Freezing Rain",
+  67: "Freezing Rain (Heavy)",
+
+  71: "Light Snow",
+  73: "Moderate Snow",
+  75: "Heavy Snow",
+
+  77: "Snow Grains",
+
+  80: "Rain Showers",
+  81: "Rain Showers (Moderate)",
+  82: "Rain Showers (Violent)",
+
+  85: "Snow Showers",
+  86: "Snow Showers (Heavy)",
+
+  95: "Thunderstorm",
+  96: "Thunderstorm + Hail",
+  99: "Thunderstorm + Heavy Hail"
+};
+
+// =========================================================
 // TIME
 // =========================================================
 function formatTime(dateStr, timezone) {
