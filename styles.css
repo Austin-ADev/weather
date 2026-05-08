@@ -25,7 +25,7 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   color: white;
   background: #020617;
-  overflow: hidden; /* PAGE LOCKED */
+  overflow: hidden; /* NO PAGE SCROLL */
 }
 
 /* SHADER BACKGROUND */
@@ -47,18 +47,19 @@ body::before {
   z-index: -1;
 }
 
-/* MAIN APP WRAPPER — NOW A DASHBOARD */
+/* MAIN APP WRAPPER — CENTERED AGAIN */
 .app-container {
-  height: 100vh;
   max-width: 960px;
-  margin: 0 auto;
-  padding: 1rem;
+  margin: 2.5rem auto; /* FIXED CENTERING */
+  padding: 0 1.25rem 2.5rem;
+  height: calc(100vh - 2.5rem);
   display: grid;
   grid-template-rows: auto auto 1fr;
   gap: 0.75rem;
+  overflow: hidden;
 }
 
-/* TOP BAR: SEARCH + UNITS */
+/* TOP BAR */
 .top-bar {
   display: flex;
   gap: 0.75rem;
@@ -80,8 +81,7 @@ body::before {
   background: rgba(10, 16, 32, 0.7);
   color: white;
   outline: none;
-  transition: border-color var(--transition-med), box-shadow var(--transition-med),
-              background var(--transition-med), transform var(--transition-fast);
+  transition: var(--transition-med);
 }
 
 .search-wrapper input::placeholder {
@@ -111,7 +111,7 @@ body::before {
   height: 100%;
 }
 
-/* SEARCH RESULTS + RECENT */
+/* SEARCH RESULTS */
 .search-results {
   position: absolute;
   top: 110%;
@@ -132,16 +132,14 @@ body::before {
   font-size: 0.9rem;
   color: var(--text-soft);
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  transition: background var(--transition-fast), color var(--transition-fast),
-              transform var(--transition-fast);
+  align-items: center;
+  transition: var(--transition-fast);
 }
 
 .search-item:hover {
   background: rgba(255, 255, 255, 0.06);
   color: white;
-  transform: translateX(1px);
 }
 
 .search-star {
@@ -166,13 +164,11 @@ body::before {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-weight: 600;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
-              border-color var(--transition-fast), background var(--transition-fast);
+  transition: var(--transition-fast);
 }
 
 .unit-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
   border-color: var(--accent);
 }
 
@@ -198,8 +194,7 @@ body::before {
   cursor: pointer;
   color: var(--text-soft);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  transition: background var(--transition-fast), transform var(--transition-fast),
-              border-color var(--transition-fast), color var(--transition-fast);
+  transition: var(--transition-fast);
 }
 
 .fav-chip:hover {
@@ -221,19 +216,12 @@ body::before {
   background: rgba(10, 16, 32, 0.9);
   cursor: pointer;
   font-size: 1.1rem;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   color: var(--text-soft);
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
-              background var(--transition-fast), border-color var(--transition-fast),
-              color var(--transition-fast);
+  transition: var(--transition-fast);
 }
 
 .fav-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
 }
 
 .fav-btn.active {
@@ -260,6 +248,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  height: 100%;
 }
 
 /* CURRENT WEATHER */
@@ -343,6 +332,7 @@ body::before {
   overflow: hidden;
 }
 
+/* HOURLY */
 #forecast {
   display: flex;
   gap: 0.6rem;
@@ -359,7 +349,7 @@ body::before {
   border-radius: 999px;
 }
 
-/* DAILY FORECAST — SCROLLABLE */
+/* DAILY — SCROLLABLE */
 #dailyForecast {
   display: flex;
   flex-direction: column;
