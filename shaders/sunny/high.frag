@@ -25,7 +25,9 @@ float mie(float cosTheta, float g) {
 
 void main() {
     vec2 uv = gl_FragCoord.xy / uResolution.xy;
-    vec2 p  = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
+    vec2 p = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
+p.x *= uResolution.y / uResolution.x;   // aspect correction
+
 
     // ----------------------------------------------------
     // FORCE MIDDAY ALWAYS
