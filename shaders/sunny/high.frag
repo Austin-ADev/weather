@@ -27,10 +27,10 @@ void main() {
     vec2 uv = gl_FragCoord.xy / uResolution.xy;
 
     // ----------------------------------------------------
-    // ASPECT‑CORRECTED COORDINATES (fixes droplet sun)
+    // ASPECT‑CORRECTED COORDINATES (REAL FIX)
     // ----------------------------------------------------
     vec2 p = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
-    p.x *= uResolution.y / uResolution.x;   // <-- FIXED
+    p.x *= uResolution.x / uResolution.y;   // <-- CORRECT FIX
 
     // ----------------------------------------------------
     // FORCE MIDDAY ALWAYS
@@ -54,7 +54,7 @@ void main() {
     float period  = 5.0 * 3600.0;
     float phase   = fract(timeSec / period);
 
-    float sunX = mix(0.05, 0.55, phase);   // shifted right
+    float sunX = mix(0.05, 0.55, phase);
     float sunY = 0.40 + 0.20 * sin(phase * 3.14159);
 
     vec2 sunPos = vec2(sunX, sunY);
@@ -117,7 +117,6 @@ void main() {
     color += lensRing;
     color += lensStreak;
 
-    // Dither to remove banding
     color += hash(gl_FragCoord.xy) * 0.01;
 
     gl_FragColor = vec4(color, 1.0);
