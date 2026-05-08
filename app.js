@@ -157,9 +157,21 @@ async function geocodeCity(name) {
     throw new Error("Geocode failed");
   }
 
-  const json = await res.json();
-  console.log("[DIAG] Geocode JSON:", json);
-  return json;
+  let jsonText = await res.text();
+try {
+  return JSON.parse(jsonText);
+} catch (e) {
+  console.error("[DIAG] JSON parse failed:", e);
+  console.error("[DIAG] Raw response:", jsonText);
+
+  // Fallback: return minimal structure so app keeps running
+  return {
+    current_weather: {},
+    hourly: {},
+    daily: { moon_phase: [0] }
+  };
+}
+
 }
 
 // =========================================================
