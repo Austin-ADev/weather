@@ -3,7 +3,7 @@ import { Sky } from "./sky/sky.js";
 import { WeatherEngine } from "./sky/weatherEngine.js";
 
 /* -------------------------------------------------------
-   LOGGING (Hybrid: clean but informative)
+   LOGGING
 ------------------------------------------------------- */
 const log = {
   app: (...msg) => console.log("%c[APP]", "color:#4af", ...msg),
@@ -16,7 +16,7 @@ const log = {
 let firstLoad = true;
 
 /* -------------------------------------------------------
-   UNIT SYSTEM (US ↔ Metric)
+   UNIT SYSTEM
 ------------------------------------------------------- */
 const UNIT_KEY = "weather_units";
 
@@ -78,17 +78,16 @@ const unitToggleBtn = document.getElementById("unitToggle");
    WEBGL INIT
 ------------------------------------------------------- */
 log.app("Initializing WebGL…");
-const gl = skyCanvas.getContext("webgl", { antialias: true });
+let gl = null;
 
-function resizeCanvas() {
+function safeResizeCanvas() {
+  if (!gl) return; // <-- FIX: prevent crash before GL exists
   const dpr = window.devicePixelRatio || 1;
   const rect = skyCanvas.getBoundingClientRect();
   skyCanvas.width = rect.width * dpr;
   skyCanvas.height = rect.height * dpr;
   gl.viewport(0, 0, skyCanvas.width, skyCanvas.height);
 }
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
 
 /* -------------------------------------------------------
    GPU TIER DETECTION
@@ -459,6 +458,14 @@ function initDetectLocation() {
 ------------------------------------------------------- */
 (async () => {
   log.sky("Sky.init() starting");
+
+  // Initialize WebGL FIRST
+  gl = skyCanvas.getContext("webgl", { antialias: true });
+
+  // Now safe to bind resize handler
+  window.addEventListener("resize", safeResizeCanvas);
+  safeResizeCanvas();
+
   await Sky.init(gl, gpuTier);
   log.sky("Sky.init() complete");
 
