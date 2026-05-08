@@ -262,7 +262,7 @@ function setRadar(lat, lon) {
 }
 
 // =========================================================
-– UNIT TOGGLE
+// UNIT TOGGLE
 // =========================================================
 function initUnitToggle() {
   console.log("[DIAG] initUnitToggle called");
