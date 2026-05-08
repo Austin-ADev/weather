@@ -91,14 +91,14 @@ async function fetchWeather(lat, lon) {
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lon}` +
     `&current_weather=true` +
-    `&hourly=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature` +
-    `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase` +
+    `&hourly=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,cloudcover` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,moon_phase,sunrise,sunset` +
     `&temperature_unit=${units.temp}` +
     `&windspeed_unit=${units.wind}` +
     `&precipitation_unit=${units.precip}` +
     `&timezone=auto`;
 
-  console.log("Fetching weather:", url);
+  console.log("Weather URL:", url);
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -250,51 +250,28 @@ function initToggles() {
 }
 
 // =========================================================
-// LOCATION HANDLING
+// SHADER SELECTION LOGIC
 // =========================================================
-async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
-  try {
-    const data = await fetchWeather(lat, lon);
-    const current = data.current_weather;
-    const daily = data.daily;
-    const hourly = data.hourly;
-    const timezone = data.timezone || timezoneOverride || "UTC";
-    const units = getUnitParams();
+function pickShaderForTimeAndWeather(current, daily) {
+  const now = new Date(current.time).getTime();
+  const sunrise = new Date(daily.sunrise[0]).getTime();
+  const sunset = new Date(daily.sunset[0]).getTime();
 
-    cityNameEl.textContent = label;
-    localtimeEl.textContent = formatTime(current.time, timezone);
-    tempEl.textContent = `${Math.round(current.temperature)}${units.tempSymbol}`;
-    conditionEl.textContent = `Code ${current.weathercode}`;
-    humidityEl.textContent = `${Math.round(hourly.relative_humidity_2m[0])}%`;
-    windEl.textContent = `${Math.round(current.windspeed)} ${units.windSymbol}`;
-    feelsEl.textContent = `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`;
-    moonLabelEl.textContent = moonPhaseLabel(daily.moon_phase[0]);
-
-    buildHourly(hourly, timezone);
-    buildDaily(daily);
-    setRadar(lat, lon);
-  } catch (e) {
-    console.error("Weather error:", e);
-  }
-}
-
-async function setLocationByName(name) {
-  const geo = await geocodeCity(name);
-  if (!geo.results?.length) return;
-  const r = geo.results[0];
-  const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
-  setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
+  if (now < sunrise + 45 * 60 * 1000) return "sunrise";
+  if (now > sunset - 45 * 60 * 1000) return "sunset";
+  if (now > sunset || now < sunrise) return "night";
+  return "sunny";
 }
 
 // =========================================================
-// WEBGL SKY — LOADS shaders/sunny.frag
+// WEBGL SKY
 // =========================================================
 let gl;
 let program;
-let uTimeLoc, uResolutionLoc;
+let uTimeLoc, uResolutionLoc, uWeatherLoc;
 
 async function loadShaderSource(url) {
-  const res = await fetch(url + "?v=" + Date.now()); // cache‑buster
+  const res = await fetch(url + "?v=" + Date.now());
   return res.text();
 }
 
@@ -309,12 +286,8 @@ function createShader(gl, type, src) {
   return sh;
 }
 
-async function initSky() {
-  gl = canvas.getContext("webgl", { antialias: true });
-  if (!gl) {
-    alert("WebGL not supported");
-    return;
-  }
+async function loadSkyShader(name) {
+  const fragSrc = await loadShaderSource(`shaders/${name}.frag`);
 
   const vertSrc = `
     attribute vec2 aPos;
@@ -322,8 +295,6 @@ async function initSky() {
       gl_Position = vec4(aPos, 0.0, 1.0);
     }
   `;
-
-  const fragSrc = await loadShaderSource("shaders/sunny.frag");
 
   const vs = createShader(gl, gl.VERTEX_SHADER, vertSrc);
   const fs = createShader(gl, gl.FRAGMENT_SHADER, fragSrc);
@@ -354,6 +325,19 @@ async function initSky() {
 
   uTimeLoc = gl.getUniformLocation(program, "uTime");
   uResolutionLoc = gl.getUniformLocation(program, "uResolution");
+  uWeatherLoc = gl.getUniformLocation(program, "uWeather");
+}
+
+async function initSky(shaderName) {
+  if (!gl) {
+    gl = canvas.getContext("webgl", { antialias: true });
+    if (!gl) {
+      alert("WebGL not supported");
+      return;
+    }
+  }
+
+  await loadSkyShader(shaderName);
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -370,10 +354,61 @@ async function initSky() {
     const t = (performance.now() - start) / 1000;
     gl.uniform1f(uTimeLoc, t);
     gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
+    gl.uniform1f(uWeatherLoc, currentWeatherAmount);
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(frame);
   }
   frame();
+}
+
+// =========================================================
+// LOCATION HANDLING
+// =========================================================
+let currentWeatherAmount = 0.0;
+
+async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
+  try {
+    const data = await fetchWeather(lat, lon);
+    const current = data.current_weather;
+    const daily = data.daily;
+    const hourly = data.hourly;
+    const timezone = data.timezone || timezoneOverride || "UTC";
+    const units = getUnitParams();
+
+    cityNameEl.textContent = label;
+    localtimeEl.textContent = formatTime(current.time, timezone);
+    tempEl.textContent = `${Math.round(current.temperature)}${units.tempSymbol}`;
+    conditionEl.textContent = `Code ${current.weathercode}`;
+    humidityEl.textContent = `${Math.round(hourly.relative_humidity_2m[0])}%`;
+    windEl.textContent = `${Math.round(current.windspeed)} ${units.windSymbol}`;
+    feelsEl.textContent = `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`;
+    moonLabelEl.textContent = moonPhaseLabel(daily.moon_phase[0]);
+
+    buildHourly(hourly, timezone);
+    buildDaily(daily);
+    setRadar(lat, lon);
+
+    // WEATHER → CLOUD AMOUNT
+    currentWeatherAmount = Math.min(1, hourly.cloudcover[0] / 100);
+
+    // PICK SHADER
+    const shaderName = pickShaderForTimeAndWeather(current, daily);
+    console.log("Loading shader:", shaderName);
+
+    await initSky(shaderName);
+
+  } catch (e) {
+    console.error("Weather error:", e);
+  }
+}
+
+async function setLocationByName(name) {
+  const geo = await geocodeCity(name);
+  if (!geo.results?.length) return;
+  const r = geo.results[0];
+  const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
+  setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
 }
 
 // =========================================================
@@ -383,8 +418,7 @@ window.addEventListener("DOMContentLoaded", () => {
   initSearch();
   initUnitToggle();
   initToggles();
-  initSky();
 
-  // Force initial weather load
+  // Load default city
   setLocationByName("Indianapolis");
 });
