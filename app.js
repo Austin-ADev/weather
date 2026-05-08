@@ -29,6 +29,16 @@ const searchResults = document.getElementById("searchResults");
 const unitToggleBtn = document.getElementById("unitToggle");
 
 // =========================================================
+// LOCATION MEMORY (for unit toggle)
+// =========================================================
+let lastLocation = {
+  label: null,
+  lat: null,
+  lon: null,
+  timezone: null
+};
+
+// =========================================================
 // UNITS
 // =========================================================
 const UNIT_KEY = "weather_units";
@@ -159,8 +169,51 @@ async function geocodeCity(name) {
 }
 
 // =========================================================
-// SEARCH UI
+// SEARCH UI — RECENT SEARCHES + RESULTS
 // =========================================================
+
+// RECENT SEARCHES
+const RECENT_KEY = "weather_recent_cities";
+const MAX_RECENT = 5;
+
+function loadRecentSearches() {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentSearch(label) {
+  let list = loadRecentSearches().filter(x => x !== label);
+  list.unshift(label);
+  if (list.length > MAX_RECENT) list = list.slice(0, MAX_RECENT);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+}
+
+function showRecentSearches() {
+  const recentBox = document.getElementById("recentSearches");
+  const list = loadRecentSearches();
+  recentBox.innerHTML = "";
+  if (!list.length) {
+    recentBox.style.display = "none";
+    return;
+  }
+  list.forEach(label => {
+    const item = document.createElement("div");
+    item.className = "search-item";
+    item.textContent = label;
+    item.addEventListener("click", () => {
+      searchInput.value = label;
+      recentBox.style.display = "none";
+      setLocationByName(label);
+    });
+    recentBox.appendChild(item);
+  });
+  recentBox.style.display = "block";
+}
+
+// SEARCH RESULTS
 function showSearchResults(results) {
   console.log("[DIAG] showSearchResults:", results);
   searchResults.innerHTML = "";
@@ -177,6 +230,7 @@ function showSearchResults(results) {
     item.addEventListener("click", () => {
       console.log("[DIAG] Search item clicked:", label, r.latitude, r.longitude);
       searchResults.style.display = "none";
+      document.getElementById("recentSearches").style.display = "none";
       searchInput.value = label;
       setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
     });
@@ -185,16 +239,31 @@ function showSearchResults(results) {
   searchResults.style.display = "block";
 }
 
+// SEARCH INPUT HANDLER
 function initSearch() {
   console.log("[DIAG] initSearch called");
   let timeout = null;
+
+  searchInput.addEventListener("focus", () => {
+    if (!searchInput.value.trim()) {
+      showRecentSearches();
+      searchResults.style.display = "none";
+    }
+  });
+
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim();
+    const recentBox = document.getElementById("recentSearches");
     if (timeout) clearTimeout(timeout);
+
     if (!q) {
       searchResults.style.display = "none";
+      showRecentSearches();
       return;
     }
+
+    recentBox.style.display = "none";
+
     timeout = setTimeout(async () => {
       try {
         const geo = await geocodeCity(q);
@@ -203,6 +272,13 @@ function initSearch() {
         console.error("[DIAG] Geocode error in initSearch:", e);
       }
     }, 300);
+  });
+
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".search-wrapper")) {
+      searchResults.style.display = "none";
+      document.getElementById("recentSearches").style.display = "none";
+    }
   });
 }
 // =========================================================
@@ -264,23 +340,31 @@ function setRadar(lat, lon) {
 }
 
 // =========================================================
-// UNIT TOGGLE
+// UNIT TOGGLE (PATCHED)
 // =========================================================
 function initUnitToggle() {
   console.log("[DIAG] initUnitToggle called");
+
   function updateLabel() {
     unitToggleBtn.textContent = getUnits() === "us" ? "US" : "Metric";
   }
+
   updateLabel();
+
   unitToggleBtn.addEventListener("click", () => {
     const next = getUnits() === "us" ? "metric" : "us";
     console.log("[DIAG] unitToggle clicked, new mode:", next);
     setUnits(next);
     updateLabel();
-    const label = cityNameEl.textContent;
-    if (label && label !== "--") {
-      console.log("[DIAG] Reloading location after unit change:", label);
-      setLocationByName(label);
+
+    if (lastLocation.label) {
+      console.log("[DIAG] Reloading lastLocation after unit change:", lastLocation);
+      setLocationFromCoords(
+        lastLocation.label,
+        lastLocation.lat,
+        lastLocation.lon,
+        lastLocation.timezone
+      );
     }
   });
 }
@@ -494,6 +578,14 @@ async function initSky() {
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
   console.log("[DIAG] setLocationFromCoords:", label, lat, lon, timezoneOverride);
 
+  // Save last location for unit toggle
+  lastLocation = {
+    label,
+    lat,
+    lon,
+    timezone: timezoneOverride || "UTC"
+  };
+
   const data = await fetchWeather(lat, lon);
   console.log("[DIAG] Weather data received:", data);
 
@@ -533,10 +625,12 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       ? `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`
       : `--${units.tempSymbol}`;
 
+  // Build UI sections
   buildHourly(hourly, timezone);
   buildDaily(daily);
   setRadar(lat, lon);
 
+  // Shader cloud amount
   if (hourly.cloudcover && hourly.cloudcover.length) {
     currentWeatherAmount = Math.min(1, hourly.cloudcover[0] / 100);
   } else {
@@ -545,8 +639,15 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
 
   console.log("[DIAG] currentWeatherAmount:", currentWeatherAmount);
 
+  // Shader selection
   const shaderName = pickShaderForTimeAndWeather(current, daily);
   await switchShader(shaderName);
+
+  // Save recent search
+  saveRecentSearch(label);
+
+  // Update favorites UI
+  renderFavorites(label);
 }
 
 async function setLocationByName(name) {
@@ -577,6 +678,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   initSearch();
   initUnitToggle();
   initToggles();
+
+  // Favorites button
+  document.getElementById("favoriteToggle").addEventListener("click", () => {
+    toggleFavorite(cityNameEl.textContent);
+  });
+  renderFavorites("");
 
   await initSky();
   await switchShader("sunny");

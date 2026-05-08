@@ -2,40 +2,84 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Weather</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
+  <!-- SHADER BACKGROUND -->
   <canvas id="sky"></canvas>
 
-  <div class="panel">
-    <div class="top-row">
-      <input id="citySearch" placeholder="Search city..." autocomplete="off" />
-      <button id="unitToggle">US</button>
-    </div>
-    <div id="searchResults" class="search-results"></div>
+  <!-- MAIN APP WRAPPER -->
+  <div class="app-container">
 
-    <div class="current">
-      <div id="cityName" class="city">--</div>
-      <div id="localtime" class="time">--:--</div>
-      <div id="condition" class="condition">--</div>
-      <div id="temp" class="temp">--°F</div>
-      <div class="meta">
-        <span>Humidity: <span id="humidity">--%</span></span>
-        <span>Wind: <span id="wind">-- mph</span></span>
-        <span>Feels Like: <span id="feels">--°F</span></span>
+    <!-- SEARCH + FAVORITES -->
+    <div class="top-bar">
+      <div class="search-wrapper">
+        <span class="search-icon">
+          <svg viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2" fill="none" />
+            <line x1="15" y1="15" x2="20" y2="20" stroke="currentColor" stroke-width="2" />
+          </svg>
+        </span>
+
+        <input id="citySearch" type="text" placeholder="Search city..." autocomplete="off" />
+
+        <div id="searchResults" class="search-results"></div>
+        <div id="recentSearches" class="search-results"></div>
       </div>
+
+      <button id="unitToggle" class="unit-btn">US</button>
     </div>
 
-    <div class="buttons">
-      <button id="hourlyToggle">Next 24 Hours</button>
-      <button id="dailyToggle">Next 7 Days</button>
-      <button id="radarToggle">Radar</button>
+    <!-- FAVORITES BAR -->
+    <div class="favorites-bar">
+      <div id="favoritesList" class="favorites-list"></div>
+      <button id="favoriteToggle" class="fav-btn">☆</button>
     </div>
 
-    <div id="forecast" class="forecast"></div>
-    <div id="dailyForecast" class="forecast"></div>
-    <iframe id="radarFrame" class="radar" style="display:none;"></iframe>
+    <!-- WEATHER CARD -->
+    <div class="weather-card">
+
+      <div class="header-block">
+        <div id="cityName" class="city-name">--</div>
+        <div id="localtime" class="local-time">--:--</div>
+      </div>
+
+      <div class="current-main">
+        <div id="temp" class="temp">--°F</div>
+        <div id="condition" class="condition">--</div>
+      </div>
+
+      <div class="details">
+        <div>Humidity: <span id="humidity">--%</span></div>
+        <div>Wind: <span id="wind">-- mph</span></div>
+        <div>Feels Like: <span id="feels">--°F</span></div>
+      </div>
+
+      <!-- TOGGLES -->
+      <div class="toggle-buttons">
+        <button id="hourlyToggle">Next 24 Hours</button>
+        <button id="dailyToggle">Next 7 Days</button>
+        <button id="radarToggle">Radar</button>
+      </div>
+
+      <!-- HOURLY FORECAST -->
+      <div id="forecast" class="forecast-panel"></div>
+
+      <!-- DAILY FORECAST -->
+      <div id="dailyForecast" class="forecast-panel"></div>
+
+      <!-- RADAR -->
+      <iframe
+        id="radarFrame"
+        class="radar-frame"
+        style="display:none;"
+        loading="lazy">
+      </iframe>
+
+    </div>
   </div>
 
   <script src="app.js"></script>
