@@ -376,7 +376,7 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       const code = current.weathercode;
       const hour = getLocalHour(current.time, timezone);
       const isNight = hour < 6 || hour >= 20;
-      const weatherType = mapWeatherType(code, isNight);
+      const weatherType = "sunny";
 
       WeatherEngine.setFromAPI(label, code);
 
