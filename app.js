@@ -1,4 +1,9 @@
 // =========================================================
+// DIAGNOSTIC MODE ENABLED
+// =========================================================
+console.log("%c[DIAGNOSTIC] app.js loaded", "color:#0ff;font-weight:bold;");
+
+// =========================================================
 // DOM ELEMENTS
 // =========================================================
 const canvas = document.getElementById("sky");
@@ -30,29 +35,19 @@ const unitToggleBtn = document.getElementById("unitToggle");
 const UNIT_KEY = "weather_units";
 
 function getUnits() {
-  return localStorage.getItem(UNIT_KEY) || "us";
+  const u = localStorage.getItem(UNIT_KEY) || "us";
+  console.log("[DIAG] Units:", u);
+  return u;
 }
 function setUnits(mode) {
+  console.log("[DIAG] Setting units:", mode);
   localStorage.setItem(UNIT_KEY, mode);
 }
 function getUnitParams() {
   const mode = getUnits();
-  if (mode === "metric") {
-    return {
-      temp: "celsius",
-      wind: "kmh",
-      precip: "mm",
-      tempSymbol: "°C",
-      windSymbol: "km/h"
-    };
-  }
-  return {
-    temp: "fahrenheit",
-    wind: "mph",
-    precip: "inch",
-    tempSymbol: "°F",
-    windSymbol: "mph"
-  };
+  return mode === "metric"
+    ? { temp: "celsius", wind: "kmh", precip: "mm", tempSymbol: "°C", windSymbol: "km/h" }
+    : { temp: "fahrenheit", wind: "mph", precip: "inch", tempSymbol: "°F", windSymbol: "mph" };
 }
 
 // =========================================================
@@ -66,7 +61,8 @@ function formatTime(dateStr, timezone) {
       minute: "2-digit",
       timeZone: timezone
     });
-  } catch {
+  } catch (e) {
+    console.error("[DIAG] Time format error:", e);
     return "--:--";
   }
 }
@@ -86,6 +82,12 @@ function moonPhaseLabel(phase) {
 // WEATHER API
 // =========================================================
 async function fetchWeather(lat, lon) {
+  console.log("[DIAG] fetchWeather() called with:", lat, lon);
+
+  if (!lat || !lon) {
+    console.error("[DIAG] ERROR: fetchWeather() received undefined lat/lon");
+  }
+
   const units = getUnitParams();
   const url =
     `https://api.open-meteo.com/v1/forecast` +
@@ -98,14 +100,26 @@ async function fetchWeather(lat, lon) {
     `&precipitation_unit=${units.precip}` +
     `&timezone=auto`;
 
-  console.log("Weather URL:", url);
+  console.log("[DIAG] WEATHER URL:", url);
 
-  const res = await fetch(url);
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    console.error("[DIAG] NETWORK ERROR fetching weather:", e);
+    throw e;
+  }
+
+  console.log("[DIAG] Weather response status:", res.status, res.statusText);
+
   if (!res.ok) {
-    console.error("Weather API error:", res.status, res.statusText);
+    console.error("[DIAG] Weather API error body:", await res.text());
     throw new Error("Weather fetch failed");
   }
-  return res.json();
+
+  const json = await res.json();
+  console.log("[DIAG] Weather JSON:", json);
+  return json;
 }
 
 async function geocodeCity(name) {
@@ -114,19 +128,37 @@ async function geocodeCity(name) {
       name
     )}&count=5&language=en&format=json`;
 
-  console.log("Geocoding:", url);
+  console.log("[DIAG] GEOCODE URL:", url);
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Geocode failed");
-  return res.json();
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    console.error("[DIAG] NETWORK ERROR fetching geocode:", e);
+    throw e;
+  }
+
+  console.log("[DIAG] Geocode response:", res.status, res.statusText);
+
+  if (!res.ok) {
+    console.error("[DIAG] Geocode error body:", await res.text());
+    throw new Error("Geocode failed");
+  }
+
+  const json = await res.json();
+  console.log("[DIAG] Geocode JSON:", json);
+  return json;
 }
 
 // =========================================================
 // SEARCH UI
 // =========================================================
 function showSearchResults(results) {
+  console.log("[DIAG] showSearchResults:", results);
+
   searchResults.innerHTML = "";
   if (!results?.results?.length) {
+    console.warn("[DIAG] No geocode results");
     searchResults.style.display = "none";
     return;
   }
@@ -136,6 +168,7 @@ function showSearchResults(results) {
     const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
     item.textContent = label;
     item.addEventListener("click", () => {
+      console.log("[DIAG] User selected:", label, r.latitude, r.longitude);
       searchResults.style.display = "none";
       searchInput.value = label;
       setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
@@ -149,14 +182,20 @@ function initSearch() {
   let timeout = null;
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim();
+    console.log("[DIAG] Search input:", q);
+
     if (timeout) clearTimeout(timeout);
     if (!q) {
       searchResults.style.display = "none";
       return;
     }
     timeout = setTimeout(async () => {
-      const geo = await geocodeCity(q);
-      showSearchResults(geo);
+      try {
+        const geo = await geocodeCity(q);
+        showSearchResults(geo);
+      } catch (e) {
+        console.error("[DIAG] Geocode error:", e);
+      }
     }, 250);
   });
 }
@@ -165,6 +204,7 @@ function initSearch() {
 // FORECAST BUILDERS
 // =========================================================
 function buildHourly(hourly, timezone) {
+  console.log("[DIAG] Building hourly forecast");
   forecastEl.innerHTML = "";
   const units = getUnitParams();
   for (let i = 0; i < 24; i++) {
@@ -180,6 +220,7 @@ function buildHourly(hourly, timezone) {
 }
 
 function buildDaily(daily) {
+  console.log("[DIAG] Building daily forecast");
   dailyForecastEl.innerHTML = "";
   const units = getUnitParams();
   for (let i = 0; i < daily.time.length; i++) {
@@ -204,55 +245,17 @@ function buildDaily(daily) {
 // RADAR
 // =========================================================
 function setRadar(lat, lon) {
+  console.log("[DIAG] Setting radar:", lat, lon);
   radarFrame.src =
     `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&overlay=radar`;
 }
 
 // =========================================================
-// UNIT TOGGLE
-// =========================================================
-function initUnitToggle() {
-  function updateLabel() {
-    unitToggleBtn.textContent = getUnits() === "us" ? "US" : "Metric";
-  }
-  updateLabel();
-  unitToggleBtn.addEventListener("click", () => {
-    const next = getUnits() === "us" ? "metric" : "us";
-    setUnits(next);
-    updateLabel();
-    const label = cityNameEl.textContent;
-    if (label && label !== "--") {
-      setLocationByName(label);
-    }
-  });
-}
-
-// =========================================================
-// TOGGLES
-// =========================================================
-function initToggles() {
-  hourlyToggle.addEventListener("click", () => {
-    forecastEl.classList.toggle("open");
-    dailyForecastEl.classList.remove("open");
-    radarFrame.style.display = "none";
-  });
-  dailyToggle.addEventListener("click", () => {
-    dailyForecastEl.classList.toggle("open");
-    forecastEl.classList.remove("open");
-    radarFrame.style.display = "none";
-  });
-  radarToggle.addEventListener("click", () => {
-    radarFrame.style.display =
-      radarFrame.style.display === "none" ? "block" : "none";
-    forecastEl.classList.remove("open");
-    dailyForecastEl.classList.remove("open");
-  });
-}
-
-// =========================================================
-// SHADER SELECTION LOGIC
+// SHADER SELECTION
 // =========================================================
 function pickShaderForTimeAndWeather(current, daily) {
+  console.log("[DIAG] pickShaderForTimeAndWeather:", current, daily);
+
   const now = new Date(current.time).getTime();
   const sunrise = new Date(daily.sunrise[0]).getTime();
   const sunset = new Date(daily.sunset[0]).getTime();
@@ -271,7 +274,9 @@ let program;
 let uTimeLoc, uResolutionLoc, uWeatherLoc;
 
 async function loadShaderSource(url) {
+  console.log("[DIAG] Loading shader:", url);
   const res = await fetch(url + "?v=" + Date.now());
+  if (!res.ok) console.error("[DIAG] Shader load error:", res.status, res.statusText);
   return res.text();
 }
 
@@ -280,13 +285,15 @@ function createShader(gl, type, src) {
   gl.shaderSource(sh, src);
   gl.compileShader(sh);
   if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    console.error(gl.getShaderInfoLog(sh));
+    console.error("[DIAG] Shader compile error:", gl.getShaderInfoLog(sh));
     throw new Error("Shader compile failed");
   }
   return sh;
 }
 
 async function loadSkyShader(name) {
+  console.log("[DIAG] loadSkyShader:", name);
+
   const fragSrc = await loadShaderSource(`shaders/${name}.frag`);
 
   const vertSrc = `
@@ -303,6 +310,10 @@ async function loadSkyShader(name) {
   gl.attachShader(program, vs);
   gl.attachShader(program, fs);
   gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error("[DIAG] Program link error:", gl.getProgramInfoLog(program));
+  }
 
   gl.useProgram(program);
 
@@ -326,13 +337,17 @@ async function loadSkyShader(name) {
   uTimeLoc = gl.getUniformLocation(program, "uTime");
   uResolutionLoc = gl.getUniformLocation(program, "uResolution");
   uWeatherLoc = gl.getUniformLocation(program, "uWeather");
+
+  console.log("[DIAG] Shader uniforms:", { uTimeLoc, uResolutionLoc, uWeatherLoc });
 }
 
 async function initSky(shaderName) {
+  console.log("[DIAG] initSky:", shaderName);
+
   if (!gl) {
     gl = canvas.getContext("webgl", { antialias: true });
     if (!gl) {
-      alert("WebGL not supported");
+      console.error("[DIAG] WebGL not supported");
       return;
     }
   }
@@ -345,6 +360,7 @@ async function initSky(shaderName) {
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     gl.viewport(0, 0, canvas.width, canvas.height);
+    console.log("[DIAG] Canvas resized:", canvas.width, canvas.height);
   }
   window.addEventListener("resize", resize);
   resize();
@@ -368,6 +384,12 @@ async function initSky(shaderName) {
 let currentWeatherAmount = 0.0;
 
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
+  console.log("[DIAG] setLocationFromCoords:", label, lat, lon);
+
+  if (!lat || !lon) {
+    console.error("[DIAG] ERROR: setLocationFromCoords got undefined lat/lon");
+  }
+
   try {
     const data = await fetchWeather(lat, lon);
     const current = data.current_weather;
@@ -375,6 +397,8 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
     const hourly = data.hourly;
     const timezone = data.timezone || timezoneOverride || "UTC";
     const units = getUnitParams();
+
+    console.log("[DIAG] Weather data:", data);
 
     cityNameEl.textContent = label;
     localtimeEl.textContent = formatTime(current.time, timezone);
@@ -389,25 +413,35 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
     buildDaily(daily);
     setRadar(lat, lon);
 
-    // WEATHER → CLOUD AMOUNT
     currentWeatherAmount = Math.min(1, hourly.cloudcover[0] / 100);
+    console.log("[DIAG] Cloud amount:", currentWeatherAmount);
 
-    // PICK SHADER
     const shaderName = pickShaderForTimeAndWeather(current, daily);
-    console.log("Loading shader:", shaderName);
+    console.log("[DIAG] Selected shader:", shaderName);
 
     await initSky(shaderName);
 
   } catch (e) {
-    console.error("Weather error:", e);
+    console.error("[DIAG] Weather error:", e);
   }
 }
 
 async function setLocationByName(name) {
+  console.log("[DIAG] setLocationByName:", name);
+
   const geo = await geocodeCity(name);
-  if (!geo.results?.length) return;
+  console.log("[DIAG] Geocode result:", geo);
+
+  if (!geo.results?.length) {
+    console.error("[DIAG] ERROR: No geocode results for:", name);
+    return;
+  }
+
   const r = geo.results[0];
   const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
+
+  console.log("[DIAG] Using geocode:", label, r.latitude, r.longitude);
+
   setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
 }
 
@@ -415,10 +449,12 @@ async function setLocationByName(name) {
 // MAIN
 // =========================================================
 window.addEventListener("DOMContentLoaded", () => {
+  console.log("%c[DIAGNOSTIC] DOMContentLoaded", "color:#0f0;font-weight:bold;");
+
   initSearch();
   initUnitToggle();
   initToggles();
 
-  // Load default city
+  console.log("[DIAG] Loading default city: Indianapolis");
   setLocationByName("Indianapolis");
 });
