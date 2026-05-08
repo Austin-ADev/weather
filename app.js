@@ -70,37 +70,27 @@ const WEATHER_TEXT = {
   1: "Mainly Clear",
   2: "Partly Cloudy",
   3: "Overcast",
-
   45: "Fog",
-  48: "Depositing Rime Fog",
-
+  48: "Rime Fog",
   51: "Light Drizzle",
   53: "Moderate Drizzle",
   55: "Dense Drizzle",
-
   56: "Freezing Drizzle",
   57: "Freezing Drizzle (Dense)",
-
   61: "Light Rain",
   63: "Moderate Rain",
   65: "Heavy Rain",
-
   66: "Freezing Rain",
   67: "Freezing Rain (Heavy)",
-
   71: "Light Snow",
   73: "Moderate Snow",
   75: "Heavy Snow",
-
   77: "Snow Grains",
-
   80: "Rain Showers",
   81: "Rain Showers (Moderate)",
   82: "Rain Showers (Violent)",
-
   85: "Snow Showers",
   86: "Snow Showers (Heavy)",
-
   95: "Thunderstorm",
   96: "Thunderstorm + Hail",
   99: "Thunderstorm + Heavy Hail"
@@ -127,7 +117,7 @@ function formatTime(dateStr, timezone) {
 }
 
 // =========================================================
-// WEATHER API (NO MOON PHASE)
+// WEATHER API
 // =========================================================
 async function fetchWeather(lat, lon) {
   console.log("[DIAG] fetchWeather called with:", lat, lon);
@@ -215,8 +205,6 @@ async function geocodeCity(name) {
 // =========================================================
 // SEARCH UI — RECENT SEARCHES + RESULTS
 // =========================================================
-
-// RECENT SEARCHES
 const RECENT_KEY = "weather_recent_cities";
 const MAX_RECENT = 5;
 
@@ -257,7 +245,6 @@ function showRecentSearches() {
   recentBox.style.display = "block";
 }
 
-// SEARCH RESULTS
 function showSearchResults(results) {
   console.log("[DIAG] showSearchResults:", results);
   searchResults.innerHTML = "";
@@ -283,7 +270,6 @@ function showSearchResults(results) {
   searchResults.style.display = "block";
 }
 
-// SEARCH INPUT HANDLER
 function initSearch() {
   console.log("[DIAG] initSearch called");
   let timeout = null;
@@ -390,7 +376,7 @@ function buildHourly(hourly, timezone) {
     row.innerHTML = `
       <div>${formatTime(hourly.time[i], timezone)}</div>
       <div>${Math.round(hourly.temperature_2m[i])}${units.tempSymbol}</div>
-      <div>${hourly.weather_code[i]}</div>
+      <div>${WEATHER_TEXT[hourly.weather_code[i]] || "—"}</div>
     `;
     forecastEl.appendChild(row);
   }
@@ -416,7 +402,7 @@ function buildDaily(daily) {
       <div>${date}</div>
       <div>${Math.round(daily.temperature_2m_max[i])}${units.tempSymbol} /
            ${Math.round(daily.temperature_2m_min[i])}${units.tempSymbol}</div>
-      <div>${daily.weather_code[i]}</div>
+      <div>${WEATHER_TEXT[daily.weather_code[i]] || "—"}</div>
     `;
     dailyForecastEl.appendChild(row);
   }
@@ -700,7 +686,8 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       ? `${Math.round(current.temperature)}${units.tempSymbol}`
       : `--${units.tempSymbol}`;
 
-  conditionEl.textContent = `Code ${current.weathercode ?? "--"}`;
+  const wc = current.weathercode;
+  conditionEl.textContent = WEATHER_TEXT[wc] || "Unknown";
 
   humidityEl.textContent =
     hourly.relative_humidity_2m && hourly.relative_humidity_2m.length
