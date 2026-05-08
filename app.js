@@ -1,14 +1,6 @@
-// app.js
-
-/* ---------------- LOGGING ---------------- */
-const log = {
-  app: (...m) => console.log("%c[APP]", "color:#4af", ...m),
-  fetch: (...m) => console.log("%c[FETCH]", "color:#f66", ...m),
-  search: (...m) => console.log("%c[SEARCH]", "color:#9cf", ...m)
-};
-
-/* ---------------- DOM ---------------- */
+// ---------- DOM ----------
 const canvas = document.getElementById("sky");
+
 const cityNameEl = document.getElementById("cityName");
 const localtimeEl = document.getElementById("localtime");
 const conditionEl = document.getElementById("condition");
@@ -30,7 +22,7 @@ const searchInput = document.getElementById("citySearch");
 const searchResults = document.getElementById("searchResults");
 const unitToggleBtn = document.getElementById("unitToggle");
 
-/* ---------------- UNITS ---------------- */
+// ---------- UNITS ----------
 const UNIT_KEY = "weather_units";
 
 function getUnits() {
@@ -59,7 +51,7 @@ function getUnitParams() {
   };
 }
 
-/* ---------------- TIME / MOON ---------------- */
+// ---------- TIME / MOON ----------
 function formatTime(dateStr, timezone) {
   try {
     const d = new Date(dateStr);
@@ -84,7 +76,7 @@ function moonPhaseLabel(phase) {
   return "Waning Crescent";
 }
 
-/* ---------------- API ---------------- */
+// ---------- API ----------
 async function fetchWeather(lat, lon) {
   const units = getUnitParams();
   const url =
@@ -97,8 +89,6 @@ async function fetchWeather(lat, lon) {
     `&windspeed_unit=${units.wind}` +
     `&precipitation_unit=${units.precip}` +
     `&timezone=auto`;
-
-  log.fetch("Weather:", url);
   const res = await fetch(url);
   if (!res.ok) throw new Error("Weather fetch failed");
   return res.json();
@@ -109,13 +99,12 @@ async function geocodeCity(name) {
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
       name
     )}&count=5&language=en&format=json`;
-  log.search("Geocode:", url);
   const res = await fetch(url);
   if (!res.ok) throw new Error("Geocode failed");
   return res.json();
 }
 
-/* ---------------- SEARCH UI ---------------- */
+// ---------- SEARCH ----------
 function showSearchResults(results) {
   searchResults.innerHTML = "";
   if (!results?.results?.length) {
@@ -153,7 +142,7 @@ function initSearch() {
   });
 }
 
-/* ---------------- FORECAST BUILDERS ---------------- */
+// ---------- FORECAST ----------
 function buildHourly(hourly, timezone) {
   forecastEl.innerHTML = "";
   const units = getUnitParams();
@@ -190,13 +179,13 @@ function buildDaily(daily) {
   }
 }
 
-/* ---------------- RADAR ---------------- */
+// ---------- RADAR ----------
 function setRadar(lat, lon) {
   radarFrame.src =
     `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=5&overlay=radar`;
 }
 
-/* ---------------- UNIT TOGGLE ---------------- */
+// ---------- UNIT TOGGLE ----------
 function initUnitToggle() {
   function updateLabel() {
     unitToggleBtn.textContent = getUnits() === "us" ? "US" : "Metric";
@@ -213,7 +202,7 @@ function initUnitToggle() {
   });
 }
 
-/* ---------------- TOGGLES ---------------- */
+// ---------- TOGGLES ----------
 function initToggles() {
   hourlyToggle.addEventListener("click", () => {
     forecastEl.classList.toggle("open");
@@ -233,7 +222,7 @@ function initToggles() {
   });
 }
 
-/* ---------------- LOCATION ---------------- */
+// ---------- LOCATION ----------
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
   try {
     const data = await fetchWeather(lat, lon);
@@ -256,7 +245,7 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
     buildDaily(daily);
     setRadar(lat, lon);
   } catch (e) {
-    log.app("Weather error:", e);
+    console.log("Weather error:", e);
   }
 }
 
@@ -268,16 +257,57 @@ async function setLocationByName(name) {
   setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
 }
 
-/* ---------------- WEBGL: SUNNY SKY ---------------- */
+// ---------- WEBGL SKY (INLINE SHADER) ----------
 let gl;
-let program;
-let uTimeLoc, uResolutionLoc;
-let startTime = performance.now();
 
-async function loadShaderSource(url) {
-  const res = await fetch(url);
-  return res.text();
+const fragSrc = `
+#ifdef GL_ES
+precision highp float;
+#endif
+
+uniform float uTime;
+uniform vec2  uResolution;
+
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
 }
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / uResolution.xy;
+
+    vec3 top = vec3(0.20, 0.55, 1.00);
+    vec3 bottom = vec3(0.65, 0.82, 1.00);
+    vec3 color = mix(bottom, top, uv.y);
+
+    vec2 p = gl_FragCoord.xy - 0.5 * uResolution.xy;
+    float scale = min(uResolution.x, uResolution.y);
+    p /= scale;
+
+    vec2 sunPos = vec2(0.3, 0.25);
+    sunPos = vec2(
+        (sunPos.x - 0.5) * (uResolution.x / scale),
+        (sunPos.y - 0.5) * (uResolution.y / scale)
+    );
+
+    float d = length(p - sunPos);
+
+    float sunRadius = 0.08;
+    float sunDisc = smoothstep(sunRadius, sunRadius * 0.7, d);
+    vec3 sunColor = vec3(1.0, 0.9, 0.6);
+
+    float corona = exp(-10.0 * d);
+    vec3 coronaColor = vec3(1.0, 0.97, 0.9) * corona * 0.7;
+
+    color += sunColor * sunDisc;
+    color += coronaColor;
+
+    color += hash(gl_FragCoord.xy) * 0.01;
+
+    gl_FragColor = vec4(color, 1.0);
+}
+`;
 
 function createShader(gl, type, src) {
   const sh = gl.createShader(type);
@@ -285,16 +315,15 @@ function createShader(gl, type, src) {
   gl.compileShader(sh);
   if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
     console.error(gl.getShaderInfoLog(sh));
-    gl.deleteShader(sh);
-    return null;
+    throw new Error("Shader compile failed");
   }
   return sh;
 }
 
-async function initSky() {
-  gl = canvas.getContext("webgl", { antialias: true });
+function initSky() {
+  gl = canvas.getContext("webgl");
   if (!gl) {
-    console.error("WebGL not supported");
+    alert("WebGL not supported");
     return;
   }
 
@@ -305,19 +334,13 @@ async function initSky() {
     }
   `;
 
-  const fragSrc = await loadShaderSource("shaders/sunny.frag");
-
   const vs = createShader(gl, gl.VERTEX_SHADER, vertSrc);
   const fs = createShader(gl, gl.FRAGMENT_SHADER, fragSrc);
 
-  program = gl.createProgram();
+  const program = gl.createProgram();
   gl.attachShader(program, vs);
   gl.attachShader(program, fs);
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error(gl.getProgramInfoLog(program));
-    return;
-  }
 
   gl.useProgram(program);
 
@@ -338,8 +361,8 @@ async function initSky() {
   gl.enableVertexAttribArray(aPosLoc);
   gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
 
-  uTimeLoc = gl.getUniformLocation(program, "uTime");
-  uResolutionLoc = gl.getUniformLocation(program, "uResolution");
+  const uTimeLoc = gl.getUniformLocation(program, "uTime");
+  const uResLoc = gl.getUniformLocation(program, "uResolution");
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -351,27 +374,22 @@ async function initSky() {
   window.addEventListener("resize", resize);
   resize();
 
+  const start = performance.now();
   function frame() {
-    const now = performance.now();
-    const t = (now - startTime) / 1000.0;
-
-    gl.useProgram(program);
+    const t = (performance.now() - start) / 1000;
     gl.uniform1f(uTimeLoc, t);
-    gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
-
+    gl.uniform2f(uResLoc, canvas.width, canvas.height);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(frame);
   }
   frame();
 }
 
-/* ---------------- MAIN ---------------- */
-(async () => {
+// ---------- MAIN ----------
+(function main() {
   initSearch();
   initUnitToggle();
   initToggles();
-  await initSky();
-
-  log.app("Initial location: Indianapolis");
+  initSky();
   setLocationByName("Indianapolis");
 })();

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Weather v2</title>
+  <title>Weather</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -16,10 +16,10 @@
     <div id="searchResults" class="search-results"></div>
 
     <div class="current">
-      <div class="city" id="cityName">--</div>
-      <div class="time" id="localtime">--:--</div>
-      <div class="condition" id="condition">--</div>
-      <div class="temp" id="temp">--°F</div>
+      <div id="cityName" class="city">--</div>
+      <div id="localtime" class="time">--:--</div>
+      <div id="condition" class="condition">--</div>
+      <div id="temp" class="temp">--°F</div>
       <div class="meta">
         <span>Humidity: <span id="humidity">--%</span></span>
         <span>Wind: <span id="wind">-- mph</span></span>
@@ -39,6 +39,6 @@
     <iframe id="radarFrame" class="radar" style="display:none;"></iframe>
   </div>
 
-  <script type="module" src="app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
