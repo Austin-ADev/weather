@@ -319,9 +319,10 @@ function renderFavorites(currentLabel) {
     const chip = document.createElement("div");
     chip.className = "fav-chip" + (label === currentLabel ? " active" : "");
     chip.textContent = label;
+
     chip.addEventListener("click", async () => {
-  await setLocationByName(label);
-});
+      await setLocationByName(label);
+    });
 
     container.appendChild(chip);
   });
@@ -587,7 +588,7 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
   // Save recent search
   saveRecentSearch(label);
 
-  // Update favorites UI
+  // Update favorites UI (must be last)
   renderFavorites(label);
 }
 
@@ -598,7 +599,7 @@ async function setLocationByName(name) {
   const r = geo.results[0];
   const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
 
-  setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
+  await setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
 }
 
 // =========================================================
