@@ -424,23 +424,6 @@ function initUnitToggle() {
 }
 
 // =========================================================
-// TABS (NO HIDING — JUST HIGHLIGHT + SCROLL)
-// =========================================================
-function initTabs() {
-  hourlyToggle.addEventListener("click", () => {
-    hourlyToggle.classList.add("active");
-    dailyToggle.classList.remove("active");
-    forecastEl.scrollIntoView({ behavior: "smooth" });
-  });
-
-  dailyToggle.addEventListener("click", () => {
-    dailyToggle.classList.add("active");
-    hourlyToggle.classList.remove("active");
-    dailyForecastEl.scrollIntoView({ behavior: "smooth" });
-  });
-}
-
-// =========================================================
 // SHADER SYSTEM
 // =========================================================
 let gl;
@@ -643,7 +626,6 @@ function pickShaderForTimeAndWeather(current, daily) {
 window.addEventListener("DOMContentLoaded", async () => {
   initSearch();
   initUnitToggle();
-  initTabs();
 
   document.getElementById("favoriteToggle").addEventListener("click", () => {
     toggleFavorite(cityNameEl.textContent);
