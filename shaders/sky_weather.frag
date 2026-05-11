@@ -141,4 +141,26 @@ void main() {
     cloudShape = min(cloudShape * cloudDensity, 1.0);
 
     // Cloud lighting
-    vec
+    vec3 cloudLit = mix(vec3(1.0), vec3(0.7, 0.75, 0.82), uWeather);
+
+    // Sunlit clouds
+    float cloudSunDot = max(dot(sd, normalize(vec2(uv.x, uv.y))), 0.0);
+    cloudLit = mix(cloudLit, vec3(1.0, 0.95, 0.8),
+                   pow(cloudSunDot, 3.0) * dayAmt * 0.7);
+
+    col = mix(col, cloudLit, cloudShape * 0.92);
+
+    // ------------------------------
+    // Light haze (overcast)
+    // ------------------------------
+    col = mix(col, vec3(0.75, 0.78, 0.82),
+              uWeather * 0.15 * (1.0 - uv.y * 0.5));
+
+    // ------------------------------
+    // Tonemapping + gamma
+    // ------------------------------
+    col = col / (col + 0.15);   // filmic tonemap
+    col = pow(col, vec3(0.92)); // gamma
+
+    gl_FragColor = vec4(col, 1.0);
+}
