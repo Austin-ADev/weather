@@ -4,12 +4,9 @@ precision mediump float;
 
 uniform float uTime;
 uniform vec2  uResolution;
-uniform float uWeather;   // 0.0 = clear, 1.0 = overcast
-uniform float uDayPhase;  // 0.0 = midnight, 0.5 = noon, 1.0 = next midnight
+uniform float uWeather;
+uniform float uDayPhase;
 
-// ------------------------------
-// Utility
-// ------------------------------
 float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
@@ -25,9 +22,8 @@ float noise(vec2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-// Sun direction from day phase
 vec2 sunDir(float phase) {
-    float a = (phase - 0.25) * 6.2831853; // shift so 0.5 = top
+    float a = (phase - 0.25) * 6.2831853;
     return normalize(vec2(cos(a), sin(a)));
 }
 
@@ -35,18 +31,12 @@ void main() {
     vec2 uv = (gl_FragCoord.xy / uResolution.xy) * 2.0 - 1.0;
     uv.x *= uResolution.x / uResolution.y;
 
-    // ------------------------------
-    // Day / Night blend
-    // ------------------------------
     float dayAmt = smoothstep(0.22, 0.50, uDayPhase) *
                    (1.0 - smoothstep(0.50, 0.78, uDayPhase));
     float nightAmt = 1.0 - dayAmt;
 
-    // ------------------------------
-    // Deep Blue Midday Sky Colors
-    // ------------------------------
-    vec3 dayTop    = vec3(0.05, 0.25, 0.75);   // deep zenith blue
-    vec3 dayHorizon= vec3(0.65, 0.75, 0.95);   // bright horizon
+    vec3 dayTop    = vec3(0.05, 0.25, 0.75);
+    vec3 dayHorizon= vec3(0.65, 0.75, 0.95);
 
     vec3 nightTop  = vec3(0.02, 0.03, 0.08);
     vec3 nightHor  = vec3(0.08, 0.06, 0.12);
@@ -58,23 +48,17 @@ void main() {
 
     vec3 col = mix(nightSky, daySky, dayAmt);
 
-    // ------------------------------
-    // Sun (tight Mie halo)
-    // ------------------------------
     vec2 sd = sunDir(uDayPhase);
     float sunDot = dot(normalize(vec2(uv.x, uv.y)), sd);
 
-    float sunHalo = pow(max(sunDot, 0.0), 200.0);   // tight halo
-    float sunCore = pow(max(sunDot, 0.0), 800.0);   // bright core
+    float sunHalo = pow(max(sunDot, 0.0), 200.0);
+    float sunCore = pow(max(sunDot, 0.0), 800.0);
 
     vec3 sunColor = vec3(1.0, 0.95, 0.85);
 
     col += sunColor * sunHalo * 1.2 * dayAmt;
     col += sunColor * sunCore * 2.0 * dayAmt;
 
-    // ------------------------------
-    // Moon (opposite sun)
-    // ------------------------------
     vec2 md = -sd;
     float moonDot = dot(normalize(vec2(uv.x, uv.y)), md);
     float moonGlow = pow(max(moonDot, 0.0), 600.0);
@@ -107,11 +91,12 @@ void main() {
     float amp = 0.55;
     float freq = 1.0;
 
-    for (int i = 0; i < 5; i++) {
-        cloudNoise += noise(cuv * freq) * amp;
-        freq *= 2.0;
-        amp *= 0.5;
-    }
+    // WebGL1‑safe fixed loop
+    cloudNoise += noise(cuv * freq) * amp; freq *= 2.0; amp *= 0.5;
+    cloudNoise += noise(cuv * freq) * amp; freq *= 2.0; amp *= 0.5;
+    cloudNoise += noise(cuv * freq) * amp; freq *= 2.0; amp *= 0.5;
+    cloudNoise += noise(cuv * freq) * amp; freq *= 2.0; amp *= 0.5;
+    cloudNoise += noise(cuv * freq) * amp;
 
     float clouds = smoothstep(0.45, 0.85, cloudNoise);
 
