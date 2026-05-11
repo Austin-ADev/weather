@@ -319,7 +319,10 @@ function renderFavorites(currentLabel) {
     const chip = document.createElement("div");
     chip.className = "fav-chip" + (label === currentLabel ? " active" : "");
     chip.textContent = label;
-    chip.addEventListener("click", () => setLocationByName(label));
+    chip.addEventListener("click", async () => {
+  await setLocationByName(label);
+});
+
     container.appendChild(chip);
   });
 
