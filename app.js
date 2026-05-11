@@ -429,9 +429,10 @@ function initUnitToggle() {
 // =========================================================
 let gl;
 let program;
-let uTimeLoc, uResolutionLoc, uWeatherLoc;
+let uTimeLoc, uResolutionLoc, uWeatherLoc, uDayPhaseLoc;
 let currentShaderName = null;
 let currentWeatherAmount = 0.0;
+let currentDayPhase = 0.5;
 
 async function loadShaderSource(url) {
   const res = await fetch(url + "?v=" + Date.now());
@@ -496,9 +497,13 @@ async function switchShader(name) {
   uTimeLoc = gl.getUniformLocation(program, "uTime");
   uResolutionLoc = gl.getUniformLocation(program, "uResolution");
   uWeatherLoc = gl.getUniformLocation(program, "uWeather");
+  uDayPhaseLoc = gl.getUniformLocation(program, "uDayPhase");
 
   currentShaderName = name;
 }
+
+// expose to console
+window.switchShader = switchShader;
 // =========================================================
 // INIT SKY
 // =========================================================
@@ -520,10 +525,11 @@ async function initSky() {
   function frame() {
     const t = (performance.now() - start) / 1000;
 
-    if (uTimeLoc && uResolutionLoc && uWeatherLoc) {
+    if (uTimeLoc && uResolutionLoc && uWeatherLoc && uDayPhaseLoc) {
       gl.uniform1f(uTimeLoc, t);
       gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
       gl.uniform1f(uWeatherLoc, currentWeatherAmount);
+      gl.uniform1f(uDayPhaseLoc, currentDayPhase);
     }
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -577,18 +583,40 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
   buildDaily(daily);
   setRadar(lat, lon);
 
-  // Shader cloud amount
+  // CLOUD AMOUNT → shader
   currentWeatherAmount =
     hourly.cloudcover?.length ? Math.min(1, hourly.cloudcover[0] / 100) : 0.0;
 
-  // Pick shader
-  const shaderName = pickShaderForTimeAndWeather(current, daily);
-  await switchShader(shaderName);
+  // DAY PHASE → shader
+  try {
+    if (current.time && daily.sunrise?.length && daily.sunset?.length) {
+      const now = new Date(current.time).getTime();
+      const sunrise = new Date(daily.sunrise[0]).getTime();
+      const sunset = new Date(daily.sunset[0]).getTime();
+
+      if (now <= sunrise) {
+        const span = 6 * 60 * 60 * 1000;
+        currentDayPhase = 0.25 * Math.max(0, Math.min(1, 1 - (sunrise - now) / span));
+      } else if (now >= sunset) {
+        const span = 6 * 60 * 60 * 1000;
+        currentDayPhase = 0.75 + 0.25 * Math.max(0, Math.min(1, (now - sunset) / span));
+      } else {
+        currentDayPhase = 0.25 + 0.5 * ((now - sunrise) / (sunset - sunrise));
+      }
+    } else {
+      currentDayPhase = 0.5;
+    }
+  } catch {
+    currentDayPhase = 0.5;
+  }
+
+  // Switch to sky_weather shader (or whatever is active)
+  await switchShader(currentShaderName || "sky_weather");
 
   // Save recent search
   saveRecentSearch(label);
 
-  // Update favorites UI (must be last)
+  // Update favorites UI
   renderFavorites(label);
 }
 
@@ -603,12 +631,12 @@ async function setLocationByName(name) {
 }
 
 // =========================================================
-// SHADER PICKER
+// SHADER PICKER (OPTIONAL)
 // =========================================================
 function pickShaderForTimeAndWeather(current, daily) {
   try {
     if (!current?.time || !daily?.sunrise?.length || !daily?.sunset?.length)
-      return "sunny";
+      return "sky_weather";
 
     const now = new Date(current.time).getTime();
     const sunrise = new Date(daily.sunrise[0]).getTime();
@@ -617,9 +645,9 @@ function pickShaderForTimeAndWeather(current, daily) {
     if (now < sunrise + 45 * 60 * 1000) return "sunrise";
     if (now > sunset - 45 * 60 * 1000) return "sunset";
     if (now > sunset || now < sunrise) return "night";
-    return "sunny";
+    return "sky_weather";
   } catch {
-    return "sunny";
+    return "sky_weather";
   }
 }
 
@@ -637,7 +665,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   renderFavorites("");
 
   await initSky();
-  await switchShader("sunny");
+  await switchShader("sky_weather");
 
   setLocationByName("Indianapolis");
 });
