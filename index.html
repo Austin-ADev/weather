@@ -5,21 +5,54 @@
   <title>Weather</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="styles.css" />
+
+  <style>
+    /* Hides the entire UI instantly */
+    .hidden-ui {
+      display: none !important;
+    }
+
+    /* Optional: make canvas cover the screen */
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    #sky {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      display: block;
+    }
+
+    /* UI sits above the shader */
+    .app-container {
+      position: relative;
+      z-index: 10;
+    }
+  </style>
 </head>
+
 <body>
   <canvas id="sky"></canvas>
 
-  <div class="app-container">
+  <!-- WRAP ALL UI IN ONE CONTAINER -->
+  <div id="ui" class="app-container">
+
     <!-- TOP BAR -->
     <div class="top-bar">
       <div class="search-wrapper">
         <span class="search-icon">
-          <!-- SVG search icon -->
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path fill="currentColor"
               d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79L19 20.5 20.5 19 15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
           </svg>
         </span>
+
         <input id="citySearch" type="text" placeholder="Search city..." autocomplete="off" />
         <div id="searchResults" class="search-results"></div>
         <div id="recentSearches" class="search-results"></div>
@@ -36,7 +69,6 @@
 
     <!-- MAIN CONTENT -->
     <div class="content-area">
-      <!-- LEFT: WEATHER CARD -->
       <div class="weather-card">
         <div class="header-block">
           <div id="cityName" class="city-name">—</div>
@@ -54,7 +86,6 @@
           <div>Feels Like: <span id="feels">--°F</span></div>
         </div>
 
-        <!-- FORECAST PANELS (NO TOGGLES, ALWAYS VISIBLE) -->
         <div class="forecast-panel">
           <div class="panel-title">Next 24 Hours</div>
           <div id="forecast"></div>
@@ -66,7 +97,6 @@
         </div>
       </div>
 
-      <!-- RIGHT: RADAR -->
       <iframe
         id="radarFrame"
         class="radar-frame"
@@ -76,6 +106,20 @@
       ></iframe>
     </div>
   </div>
+
+  <script>
+    // Toggle UI visibility
+    function toggleUI() {
+      document.getElementById("ui").classList.toggle("hidden-ui");
+    }
+
+    // Press H to hide/show UI
+    window.addEventListener("keydown", e => {
+      if (e.key.toLowerCase() === "h") {
+        toggleUI();
+      }
+    });
+  </script>
 
   <script src="app.js"></script>
 </body>
