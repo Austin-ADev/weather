@@ -20,9 +20,6 @@ const forecastEl = document.getElementById("forecast");
 const dailyForecastEl = document.getElementById("dailyForecast");
 const radarFrame = document.getElementById("radarFrame");
 
-const hourlyToggle = document.getElementById("hourlyToggle");
-const dailyToggle = document.getElementById("dailyToggle");
-
 const searchInput = document.getElementById("citySearch");
 const searchResults = document.getElementById("searchResults");
 const unitToggleBtn = document.getElementById("unitToggle");
@@ -250,7 +247,6 @@ function showSearchResults(results) {
 function initSearch() {
   let timeout = null;
 
-  // ENTER clears search + loads city
   searchInput.addEventListener("keydown", e => {
     if (e.key === "Enter") {
       const q = searchInput.value.trim();
@@ -389,6 +385,7 @@ function buildDaily(daily) {
     dailyForecastEl.appendChild(row);
   }
 }
+
 // =========================================================
 // RADAR ALWAYS VISIBLE
 // =========================================================
@@ -498,16 +495,17 @@ async function switchShader(name) {
 
   currentShaderName = name;
 }
-
+// =========================================================
+// INIT SKY
+// =========================================================
 async function initSky() {
   gl = canvas.getContext("webgl", { antialias: true });
   if (!gl) return;
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
     gl.viewport(0, 0, canvas.width, canvas.height);
   }
 
@@ -517,11 +515,13 @@ async function initSky() {
   const start = performance.now();
   function frame() {
     const t = (performance.now() - start) / 1000;
+
     if (uTimeLoc && uResolutionLoc && uWeatherLoc) {
       gl.uniform1f(uTimeLoc, t);
       gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
       gl.uniform1f(uWeatherLoc, currentWeatherAmount);
     }
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(frame);
   }
@@ -569,7 +569,6 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
       ? `${Math.round(hourly.apparent_temperature[0])}${units.tempSymbol}`
       : `--${units.tempSymbol}`;
 
-  // Build UI
   buildHourly(hourly, timezone);
   buildDaily(daily);
   setRadar(lat, lon);
