@@ -659,9 +659,12 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
 async function setLocationByName(name) {
   console.log("[LOC] Searching for:", name);
 
-  const geo = await geocodeCity(name);
+  // FIX: Strip state/country
+  const clean = name.split(",")[0].trim();
+
+  const geo = await geocodeCity(clean);
   if (!geo.results?.length) {
-    console.warn("[LOC] No results for:", name);
+    console.warn("[LOC] No results for:", name, "(cleaned:", clean, ")");
     return;
   }
 
@@ -669,7 +672,7 @@ async function setLocationByName(name) {
   let r = geo.results.find(x => x.country === "United States") || geo.results[0];
 
   // Prefer Florida for Miami / Palm Coast
-  if (/miami|palm coast/i.test(name)) {
+  if (/miami|palm coast/i.test(clean)) {
     r = geo.results.find(x => x.admin1 === "Florida") || r;
   }
 
