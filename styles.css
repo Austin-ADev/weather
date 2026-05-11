@@ -52,11 +52,11 @@ body::before {
 }
 
 /* =========================================================
-   GLOBAL SCROLLBARS
+   GLOBAL ACCENT SCROLLBARS
    ========================================================= */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  scrollbar-color: var(--accent) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -69,12 +69,12 @@ body::before {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--accent);
   border-radius: 999px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(79, 209, 255, 0.7);
 }
 
 /* =========================================================
@@ -397,7 +397,7 @@ body::before {
 }
 
 #forecast::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--accent);
   border-radius: 999px;
 }
 
