@@ -26,12 +26,17 @@
 /* =========================================================
    BODY + SHADER BACKGROUND
    ========================================================= */
+html, body {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   color: white;
   background: #020617;
   min-height: 100vh;
-  overflow-x: hidden;
 }
 
 #sky {
@@ -87,6 +92,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-height: 100vh; /* <-- ensures scrollbars appear */
 }
 
 /* =========================================================
