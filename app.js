@@ -1,7 +1,7 @@
 // =========================================================
 // DIAGNOSTIC
 // =========================================================
-console.log("%c[DIAG] app.js loaded", "color:#0ff;font-weight:bold;");
+console.log("%c[APP] app.js loaded", "color:#0ff;font-weight:bold;");
 
 // =========================================================
 // DOM ELEMENTS
@@ -93,13 +93,15 @@ const WEATHER_TEXT = {
 // =========================================================
 function formatTime(dateStr, timezone) {
   try {
-    const d = new Date(dateStr);
-    return d.toLocaleString(undefined, {
+    const d = new Date(dateStr + ":00"); // force seconds
+    return d.toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
+      hour12: true,
       timeZone: timezone
     });
-  } catch {
+  } catch (err) {
+    console.warn("[TIME] Failed to format:", err);
     return "--:--";
   }
 }
@@ -108,6 +110,8 @@ function formatTime(dateStr, timezone) {
 // WEATHER API
 // =========================================================
 async function fetchWeather(lat, lon) {
+  console.log("[API] Fetching weather for", lat, lon);
+
   const units = getUnitParams();
 
   const url =
@@ -121,17 +125,12 @@ async function fetchWeather(lat, lon) {
     `&precipitation_unit=${units.precip}` +
     `&timezone=auto`;
 
-  let res;
   try {
-    res = await fetch(url);
-  } catch {
-    return null;
-  }
-
-  const raw = await res.text();
-  try {
+    const res = await fetch(url);
+    const raw = await res.text();
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.error("[API] Weather fetch failed:", err);
     return null;
   }
 }
@@ -140,22 +139,19 @@ async function fetchWeather(lat, lon) {
 // GEOCODER
 // =========================================================
 async function geocodeCity(name) {
+  console.log("[GEO] Searching:", name);
+
   const url =
     "https://geocoding-api.open-meteo.com/v1/search" +
     `?name=${encodeURIComponent(name)}` +
     "&count=5&language=en&format=json";
 
-  let res;
   try {
-    res = await fetch(url);
-  } catch {
-    return { results: [] };
-  }
-
-  const raw = await res.text();
-  try {
+    const res = await fetch(url);
+    const raw = await res.text();
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.error("[GEO] Failed:", err);
     return { results: [] };
   }
 }
@@ -321,6 +317,7 @@ function renderFavorites(currentLabel) {
     chip.textContent = label;
 
     chip.addEventListener("click", async () => {
+      console.log("[FAV] Switching to:", label);
       await setLocationByName(label);
     });
 
@@ -423,7 +420,6 @@ function initUnitToggle() {
     }
   });
 }
-
 // =========================================================
 // SHADER SYSTEM
 // =========================================================
@@ -435,22 +431,31 @@ let currentWeatherAmount = 0.0;
 let currentDayPhase = 0.5;
 
 async function loadShaderSource(url) {
-  const res = await fetch(url + "?v=" + Date.now());
-  return res.text();
+  try {
+    const res = await fetch(url + "?v=" + Date.now());
+    return await res.text();
+  } catch (err) {
+    console.error("[SHADER] Failed to load:", url, err);
+    return "";
+  }
 }
 
 function createShader(gl, type, src) {
   const sh = gl.createShader(type);
   gl.shaderSource(sh, src);
   gl.compileShader(sh);
+
   if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    console.error(gl.getShaderInfoLog(sh));
+    console.error("[SHADER] Compile error:", gl.getShaderInfoLog(sh));
+    console.log("---- Shader Source ----\n" + src);
     throw new Error("Shader compile failed");
   }
   return sh;
 }
 
 async function loadSkyShader(name) {
+  console.log("[SHADER] Loading shader:", name);
+
   const fragSrc = await loadShaderSource(`shaders/${name}.frag`);
   const vertSrc = `
     attribute vec2 aPos;
@@ -467,49 +472,67 @@ async function loadSkyShader(name) {
   gl.attachShader(prog, fs);
   gl.linkProgram(prog);
 
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error("[SHADER] Link error:", gl.getProgramInfoLog(prog));
+    throw new Error("Shader link failed");
+  }
+
   return prog;
 }
 
 async function switchShader(name) {
-  if (name === currentShaderName) return;
+  if (name === currentShaderName) {
+    console.log("[SHADER] Already active:", name);
+    return;
+  }
 
-  const newProgram = await loadSkyShader(name);
-  program = newProgram;
-  gl.useProgram(program);
+  console.log("[SHADER] Switching to:", name);
 
-  const quad = new Float32Array([
-    -1, -1,
-     1, -1,
-    -1,  1,
-    -1,  1,
-     1, -1,
-     1,  1
-  ]);
+  try {
+    const newProgram = await loadSkyShader(name);
+    program = newProgram;
+    gl.useProgram(program);
 
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+    const quad = new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+      -1,  1,
+       1, -1,
+       1,  1
+    ]);
 
-  const aPosLoc = gl.getAttribLocation(program, "aPos");
-  gl.enableVertexAttribArray(aPosLoc);
-  gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
 
-  uTimeLoc = gl.getUniformLocation(program, "uTime");
-  uResolutionLoc = gl.getUniformLocation(program, "uResolution");
-  uWeatherLoc = gl.getUniformLocation(program, "uWeather");
-  uDayPhaseLoc = gl.getUniformLocation(program, "uDayPhase");
+    const aPosLoc = gl.getAttribLocation(program, "aPos");
+    gl.enableVertexAttribArray(aPosLoc);
+    gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
 
-  currentShaderName = name;
+    uTimeLoc = gl.getUniformLocation(program, "uTime");
+    uResolutionLoc = gl.getUniformLocation(program, "uResolution");
+    uWeatherLoc = gl.getUniformLocation(program, "uWeather");
+    uDayPhaseLoc = gl.getUniformLocation(program, "uDayPhase");
+
+    currentShaderName = name;
+  } catch (err) {
+    console.error("[SHADER] Failed to switch:", err);
+  }
 }
 
 // expose to console
 window.switchShader = switchShader;
+
 // =========================================================
 // INIT SKY
 // =========================================================
 async function initSky() {
   gl = canvas.getContext("webgl", { antialias: true });
-  if (!gl) return;
+  if (!gl) {
+    console.error("[WEBGL] Failed to initialize WebGL");
+    return;
+  }
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -522,15 +545,19 @@ async function initSky() {
   resize();
 
   const start = performance.now();
+
   function frame() {
+    if (!program) {
+      requestAnimationFrame(frame);
+      return;
+    }
+
     const t = (performance.now() - start) / 1000;
 
-    if (uTimeLoc && uResolutionLoc && uWeatherLoc && uDayPhaseLoc) {
-      gl.uniform1f(uTimeLoc, t);
-      gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
-      gl.uniform1f(uWeatherLoc, currentWeatherAmount);
-      gl.uniform1f(uDayPhaseLoc, currentDayPhase);
-    }
+    gl.uniform1f(uTimeLoc, t);
+    gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
+    gl.uniform1f(uWeatherLoc, currentWeatherAmount);
+    gl.uniform1f(uDayPhaseLoc, currentDayPhase);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(frame);
@@ -543,10 +570,15 @@ async function initSky() {
 // LOCATION HANDLING
 // =========================================================
 async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
+  console.log("[LOC] Setting location:", label, lat, lon);
+
   lastLocation = { label, lat, lon, timezone: timezoneOverride || "UTC" };
 
   const data = await fetchWeather(lat, lon);
-  if (!data) return;
+  if (!data) {
+    console.error("[LOC] Weather fetch failed for:", label);
+    return;
+  }
 
   const current = data.current_weather || {};
   const daily = data.daily || {};
@@ -606,11 +638,12 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
     } else {
       currentDayPhase = 0.5;
     }
-  } catch {
+  } catch (err) {
+    console.warn("[DAYPHASE] Failed:", err);
     currentDayPhase = 0.5;
   }
 
-  // Switch to sky_weather shader (or whatever is active)
+  // Switch to active shader
   await switchShader(currentShaderName || "sky_weather");
 
   // Save recent search
@@ -620,11 +653,26 @@ async function setLocationFromCoords(label, lat, lon, timezoneOverride) {
   renderFavorites(label);
 }
 
+// =========================================================
+// CITY NAME → COORDS
+// =========================================================
 async function setLocationByName(name) {
-  const geo = await geocodeCity(name);
-  if (!geo.results?.length) return;
+  console.log("[LOC] Searching for:", name);
 
-  const r = geo.results[0];
+  const geo = await geocodeCity(name);
+  if (!geo.results?.length) {
+    console.warn("[LOC] No results for:", name);
+    return;
+  }
+
+  // Prefer US results
+  let r = geo.results.find(x => x.country === "United States") || geo.results[0];
+
+  // Prefer Florida for Miami / Palm Coast
+  if (/miami|palm coast/i.test(name)) {
+    r = geo.results.find(x => x.admin1 === "Florida") || r;
+  }
+
   const label = `${r.name}, ${r.admin1 || r.country || ""}`.trim();
 
   await setLocationFromCoords(label, r.latitude, r.longitude, r.timezone);
@@ -655,6 +703,8 @@ function pickShaderForTimeAndWeather(current, daily) {
 // MAIN INIT
 // =========================================================
 window.addEventListener("DOMContentLoaded", async () => {
+  console.log("[APP] Initializing…");
+
   initSearch();
   initUnitToggle();
 
