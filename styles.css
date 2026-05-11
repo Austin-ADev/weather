@@ -35,8 +35,14 @@ html, body {
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   color: white;
-  background: #020617;
-  min-height: 100vh;
+  background: linear-gradient(
+  to bottom,
+  #1a2b4c 0%,    /* soft twilight */
+  #2f4f7a 30%,   /* pastel blue */
+  #5fa8dd 70%,   /* airy mid sky */
+  #b8eaff 100%   /* pastel horizon */
+);
+  min-height: auto;
 }
 
 #sky {
@@ -92,7 +98,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  min-height: 100vh; /* <-- ensures scrollbars appear */
+  min-height: auto; /* <-- ensures scrollbars appear */
 }
 
 /* =========================================================
