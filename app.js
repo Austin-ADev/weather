@@ -351,14 +351,33 @@ function buildHourly(hourly, timezone) {
 
   if (!hourly || !hourly.time) return;
 
-  for (let i = 0; i < 24 && i < hourly.time.length; i++) {
+  // 1. Get the current local hour in the target city
+  const now = new Date().toLocaleString("en-US", { timeZone: timezone });
+  const currentHour = new Date(now).getHours();
+
+  // 2. Find the index of the current hour in the API's hourly timestamps
+  let startIndex = hourly.time.findIndex(t => {
+    const d = new Date(t);
+    return d.getHours() === currentHour;
+  });
+
+  // Fallback if not found
+  if (startIndex < 0) startIndex = 0;
+
+  // 3. Slice the next 24 hours
+  const endIndex = Math.min(startIndex + 24, hourly.time.length);
+
+  // 4. Render only those hours
+  for (let i = startIndex; i < endIndex; i++) {
     const row = document.createElement("div");
     row.className = "forecast-hour";
+
     row.innerHTML = `
       <div>${formatTime(hourly.time[i], timezone)}</div>
       <div>${Math.round(hourly.temperature_2m[i])}${units.tempSymbol}</div>
       <div>${WEATHER_TEXT[hourly.weather_code[i]] || "—"}</div>
     `;
+
     forecastEl.appendChild(row);
   }
 }
