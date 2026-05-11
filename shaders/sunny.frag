@@ -30,7 +30,7 @@ float noise(vec2 p) {
 float fbm(vec2 p) {
     float v = 0.0;
     float a = 0.5;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         v += a * noise(p);
         p *= 2.0;
         a *= 0.5;
@@ -57,10 +57,10 @@ vec3 sunColorForPhase(float phase) {
 
     if (phase < 0.5) {
         float t = phase / 0.5;
-        return mix(sunrise, noon, t);
+        return mix(sunrise, noon, smoothPulse(t, 0.0, 1.0));
     } else {
         float t = (phase - 0.5) / 0.5;
-        return mix(noon, sunset, t);
+        return mix(noon, sunset, smoothPulse(t, 0.0, 1.0));
     }
 }
 
@@ -71,10 +71,10 @@ vec3 skyZenithColor(float phase) {
 
     if (phase < 0.5) {
         float t = phase / 0.5;
-        return mix(dawn, noon, t);
+        return mix(dawn, noon, smoothPulse(t, 0.0, 1.0));
     } else {
         float t = (phase - 0.5) / 0.5;
-        return mix(noon, dusk, t);
+        return mix(noon, dusk, smoothPulse(t, 0.0, 1.0));
     }
 }
 
@@ -85,10 +85,10 @@ vec3 skyHorizonColor(float phase) {
 
     if (phase < 0.5) {
         float t = phase / 0.5;
-        return mix(dawn, noon, t);
+        return mix(dawn, noon, smoothPulse(t, 0.0, 1.0));
     } else {
         float t = (phase - 0.5) / 0.5;
-        return mix(noon, dusk, t);
+        return mix(noon, dusk, smoothPulse(t, 0.0, 1.0));
     }
 }
 
@@ -102,6 +102,28 @@ float rayleighPhase(float cosTheta) {
 float hgPhase(float cosTheta, float g) {
     float g2 = g * g;
     return (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5);
+}
+
+// ------------------------------------------------------------
+// Lens flare function
+// ------------------------------------------------------------
+vec3 lensFlare(vec2 p, vec2 sunPos, vec3 sunCol) {
+    vec3 flare = vec3(0.0);
+    vec2 dir = normalize(sunPos);
+    float dist = length(p);
+    
+    // Multiple flare positions
+    float flarePositions[5] = float[](0.1, 0.2, 0.4, 0.6, 0.8);
+    float flareIntensities[5] = float[](0.5, 0.3, 0.2, 0.1, 0.05);
+    
+    for(int i = 0; i < 5; i++) {
+        vec2 flarePos = dir * flarePositions[i];
+        float flareDist = length(p - flarePos);
+        float flareAmount = exp(-flareDist * 50.0) * flareIntensities[i];
+        flare += sunCol * flareAmount;
+    }
+    
+    return flare;
 }
 
 // ------------------------------------------------------------
@@ -160,6 +182,11 @@ void main() {
     skyColor += vec3(1.0, 0.98, 0.9) * corona * 0.4;
 
     // --------------------------------------------------------
+    // Lens flare
+    // --------------------------------------------------------
+    skyColor += lensFlare(p, sunPos, sunCol) * 0.3;
+
+    // --------------------------------------------------------
     // Atmospheric scattering (subtle)
     // --------------------------------------------------------
     vec2 dir = normalize(p);
@@ -195,7 +222,8 @@ void main() {
 
     float baseCloud = fbm(cloudUV);
     float detailCloud = fbm(cloudUV * 2.5);
-    float cloudField = baseCloud * 0.7 + detailCloud * 0.3;
+    float turbulence = fbm(cloudUV * 0.5 + uTime * 0.01) * 0.1;
+    float cloudField = baseCloud * 0.7 + detailCloud * 0.3 + turbulence;
 
     // shape threshold
     float cloudMask = smoothstep(0.55, 0.8, cloudField);
@@ -212,10 +240,10 @@ void main() {
     vec3 cloudColor;
     if (phase < 0.5) {
         float t = phase / 0.5;
-        cloudColor = mix(cloudSunrise, cloudDay, t);
+        cloudColor = mix(cloudSunrise, cloudDay, smoothPulse(t, 0.0, 1.0));
     } else {
         float t = (phase - 0.5) / 0.5;
-        cloudColor = mix(cloudDay, cloudSunset, t);
+        cloudColor = mix(cloudDay, cloudSunset, smoothPulse(t, 0.0, 1.0));
     }
 
     // clouds get lit more strongly near sun
@@ -233,6 +261,12 @@ void main() {
     // --------------------------------------------------------
     float cabinDark = smoothstep(0.4, 1.0, uv.y);
     skyColor *= mix(1.0, 0.92, cabinDark * 0.2);
+
+    // --------------------------------------------------------
+    // Vignette
+    // --------------------------------------------------------
+    float vignette = 1.0 - length(uv - 0.5) * 0.3;
+    skyColor *= vignette;
 
     // --------------------------------------------------------
     // Dithering
