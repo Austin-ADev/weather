@@ -1,6 +1,5 @@
 // forecast-builder.js
-// Final, robust forecast builder module
-// Exports: buildHourly, drawHourlyChart, createBaseBitmapSnapshot, setupHourlyHover, setupHourlyTap, buildDaily
+// Final fix: marker lock color + tooltip + strict lock + auto-scroll only while hovering
 
 import { getUnitParams } from './utils.js';
 import { WEATHER_TEXT } from './constants.js';
@@ -15,7 +14,6 @@ export async function buildHourly(hourly, timezone) {
   const units = getUnitParams();
   if (!hourly || !hourly.time) return;
 
-  // align to current hour in timezone
   const now = new Date().toLocaleString("en-US", { timeZone: timezone });
   const currentHour = new Date(now).getHours();
 
@@ -64,18 +62,18 @@ export async function drawHourlyChart(temps, labels, symbol, conditions) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const hourWidth = 80; // CSS px per hour (must match sampling logic)
+  const hourWidth = 80; // CSS px per hour
   const cssH = 120;
   const cssW = Math.round(hourWidth * temps.length); // integer CSS width
   const DPR = window.devicePixelRatio || 1;
 
-  // Set CSS size and backing store size (use integer CSS width)
+  // set CSS size and backing store size
   canvas.style.width = cssW + "px";
   canvas.style.height = cssH + "px";
   canvas.width = Math.round(cssW * DPR);
   canvas.height = Math.round(cssH * DPR);
 
-  // store for handlers
+  // store CSS width for handlers
   canvas._cssWidth = cssW;
   canvas._cssHeight = cssH;
   canvas._DPR = DPR;
@@ -228,8 +226,9 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
   function cancelAutoScroll() { scrollTarget = null; }
   function ensureRaf() { if (!rafId) rafId = requestAnimationFrame(unifiedStep); }
 
+  // IMPORTANT: only allow JS auto-scroll when pointer is actively over the chart
   function easeScrollTo(target) {
-    if (pauseAutoScroll || userScrolling) return;
+    if (pauseAutoScroll || userScrolling || !hover.active) return;
     const maxLeft = Math.max(0, cssW - scroll.clientWidth);
     scrollTarget = Math.max(0, Math.min(maxLeft, target));
     ensureRaf();
@@ -282,9 +281,14 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     return { leftPx: Math.max(minCenter, Math.min(maxCenter, screenX)), useCenterTransform: false };
   }
 
-  function updateTooltipAndDraw(screenX, y, hourIndex, color = "#fff") {
+  function updateTooltipAndDraw(screenX, y, hourIndex, color = "#fff", markerType = null, markerTemp = null) {
     const { leftPx, useCenterTransform } = computeTooltipLeftAndTransform(screenX);
-    tooltip.innerHTML = `<strong>${labels[hourIndex]}</strong><div>${Math.round(temps[hourIndex])}${symbol}</div>`;
+    if (markerType && markerTemp != null) {
+      // marker tooltip (HIGH / LOW)
+      tooltip.innerHTML = `<strong>${markerType.toUpperCase()}: ${Math.round(markerTemp)}${symbol}</strong>`;
+    } else {
+      tooltip.innerHTML = `<strong>${labels[hourIndex]}</strong><div>${Math.round(temps[hourIndex])}${symbol}</div>`;
+    }
     tooltip.style.left = leftPx + "px";
     tooltip.style.top = (y - 20) + "px";
     tooltip.style.opacity = 1;
@@ -316,7 +320,9 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
 
       // color: marker color if locked, else white
       const color = markerLock ? (markerLock.color || "#fff") : "#fff";
-      updateTooltipAndDraw(screenX, dotY, hourIndex, color);
+      const markerType = markerLock ? markerLock.type : null;
+      const markerTemp = markerLock ? markerLock.temp : null;
+      updateTooltipAndDraw(screenX, dotY, hourIndex, color, markerType, markerTemp);
     }
 
     if (scrollTarget !== null || Math.abs(targetWorldX - dotWorldX) > 0.25 || Math.abs(targetY - dotY) > 0.25) {
@@ -370,17 +376,17 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
 
     if (foundMarker) {
       // engage marker lock immediately: set targets to exact marker coords and snap dot to them
-      markerLock = { x: foundMarker.x, y: foundMarker.y, color: foundMarker.color, index: foundMarker.index };
+      markerLock = { x: foundMarker.x, y: foundMarker.y, color: foundMarker.color, index: foundMarker.index, type: foundMarker.type, temp: foundMarker.temp };
       targetWorldX = foundMarker.x;
       targetY = foundMarker.y;
       // snap immediately to avoid any sampling mismatch
       dotWorldX = targetWorldX;
       dotY = targetY;
 
-      // nudge scroll if marker near edges
+      // nudge scroll if marker near edges (only if pointer is over chart)
       const markerScreenX = Math.max(0, Math.min(scroll.clientWidth, foundMarker.x - scroll.scrollLeft));
       const margin = 60, vw = scroll.clientWidth;
-      if (!pauseAutoScroll && !userScrolling) {
+      if (!pauseAutoScroll && !userScrolling && hover.active) {
         if (markerScreenX < margin) easeScrollTo(Math.max(0, foundMarker.x - margin));
         else if (markerScreenX > vw - margin) easeScrollTo(Math.min(cssW - vw, foundMarker.x - (vw - margin)));
       }
@@ -410,7 +416,7 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
       targetY = sampledY != null ? sampledY : targetY;
 
       const visibleX = hover.screenX, margin = 60, vw = scroll.clientWidth;
-      if (!pauseAutoScroll && !userScrolling) {
+      if (!pauseAutoScroll && !userScrolling && hover.active) {
         if (visibleX < margin) easeScrollTo(Math.max(0, targetWorldX - margin));
         else if (visibleX > vw - margin) easeScrollTo(Math.min(cssW - vw, targetWorldX - (vw - margin)));
       }
@@ -421,7 +427,6 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
 
   // pointer handlers
   function onPointerMove(ev) {
-    // only handle primary pointer
     if (ev.isPrimary === false) return;
     const rect = canvas.getBoundingClientRect();
     const xInCanvas = ev.clientX - rect.left;
@@ -625,8 +630,9 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
       const markerScreenX = m.x - scroll.scrollLeft;
       const dx = Math.abs(screenX - markerScreenX), dy = Math.abs(canvasY - m.y);
       if (Math.hypot(dx,dy) <= (m.hitRadius||0) || (dx <= (m.hitBox?.w||0)/2 && dy <= (m.hitBox?.h||0)/2)) {
-        // snap exactly to marker and use its color
-        tooltip.innerHTML = `<strong>${m.type.toUpperCase()}</strong><div>${Math.round(m.temp)}${symbol}</div>`;
+        // snap exactly to marker and use its color and tooltip label
+        const label = m.type === "high" ? `HIGH: ${Math.round(m.temp)}${symbol}` : `LOW: ${Math.round(m.temp)}${symbol}`;
+        tooltip.innerHTML = `<strong>${label}</strong>`;
         tooltip.style.left = clampTooltipLeft(markerScreenX) + "px";
         tooltip.style.top = (m.y - 20) + "px";
         tooltip.style.opacity = 1;
