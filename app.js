@@ -424,31 +424,31 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
 
   ctx.clearRect(0, 0, w, h);
 
-  // dense polyline aligned to hour centers
+  // Build dense polyline so worldX (0..w) maps directly to fractional hour index = x/hourWidth
   const dense = new Array(w);
-  for (let worldX = 0; worldX < w; worldX++) {
-    const hourIndex = (worldX - hourWidth / 2) / hourWidth;
+  for (let x = 0; x < w; x++) {
+    const hourIndex = x / hourWidth;           // <-- maps 0 -> first hour, w -> last hour
     const i = Math.floor(hourIndex);
 
-    if (i < 0 || i >= temps.length - 1) {
-      dense[worldX] = { x: worldX, y: null };
+    if (i < 0) { dense[x] = { x, y: null }; continue; }
+    if (i >= temps.length - 1) {
+      // at or beyond last hour, clamp to last hour value
+      const yLast = h - pad - ((temps[temps.length - 1] - min) / (max - min)) * (h - pad * 2);
+      dense[x] = { x, y: yLast };
       continue;
     }
 
     const t = hourIndex - i;
-
     const y1 = h - pad - ((temps[i] - min) / (max - min)) * (h - pad * 2);
     const y2 = h - pad - ((temps[i + 1] - min) / (max - min)) * (h - pad * 2);
-
     const y = y1 + (y2 - y1) * t;
-    dense[worldX] = { x: worldX, y };
+    dense[x] = { x, y };
   }
 
-  // draw the line
+  // Draw the line
   ctx.beginPath();
   ctx.lineWidth = 3;
   ctx.strokeStyle = accent;
-
   let started = false;
   for (let i = 0; i < dense.length; i++) {
     const p = dense[i];
@@ -458,17 +458,17 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   }
   ctx.stroke();
 
-  // compute hour-center points for markers
+  // Hour-center points for markers (centers still at i*hourWidth + hourWidth/2)
   const points = temps.map((t, i) => {
     const x = i * hourWidth + hourWidth / 2;
     const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
     return { x, y, temp: t, index: i };
   });
 
-  // prepare markers array with larger hit area
+  // Markers with larger hit area
   const markers = [];
 
-  // High marker
+  // High
   const hiIndex = temps.indexOf(max);
   const hiColor = "#bd1818";
   ctx.fillStyle = hiColor;
@@ -477,8 +477,6 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.fillText(`High: ${Math.round(max)}${symbol}`, points[hiIndex].x + 8, points[hiIndex].y - 8);
-
-  // Save a larger hit area for the high marker
   markers.push({
     type: "high",
     x: points[hiIndex].x,
@@ -486,12 +484,11 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     color: hiColor,
     temp: max,
     index: hiIndex,
-    // hitRadius for circular detection and hitBox for rectangular detection
-    hitRadius: 18,            // radial hit area
-    hitBox: { w: 36, h: 36 } // width/height centered on marker
+    hitRadius: 20,
+    hitBox: { w: 40, h: 40 }
   });
 
-  // Low marker
+  // Low
   const loIndex = temps.indexOf(min);
   const loColor = "#183eb9fa";
   ctx.fillStyle = loColor;
@@ -500,7 +497,6 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
-
   markers.push({
     type: "low",
     x: points[loIndex].x,
@@ -508,11 +504,11 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     color: loColor,
     temp: min,
     index: loIndex,
-    hitRadius: 18,
-    hitBox: { w: 36, h: 36 }
+    hitRadius: 20,
+    hitBox: { w: 40, h: 40 }
   });
 
-  // cache base image and data for hover
+  // Cache base image and data for hover
   const baseImage = ctx.getImageData(0, 0, Math.round(w * DPR), Math.round(h * DPR));
   canvas._baseImage = baseImage;
   canvas._densePoints = dense;
@@ -555,22 +551,30 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     tooltip.style.border = "";
     tooltip.style.padding = "";
     tooltip.style.boxShadow = "";
+    tooltip.style.borderRadius = "";
   }
 
-  let pending = false;
-  let lastEvent = null;
+  // Easing helper for smooth scroll
+  function easeTo(target, factor = 0.18) {
+    // factor: 0.05 (very slow) -> 0.25 (faster). Default 0.18 is gentle.
+    const current = scroll.scrollLeft;
+    const delta = target - current;
+    if (Math.abs(delta) < 0.5) { scroll.scrollLeft = target; return; }
+    scroll.scrollLeft = current + delta * factor;
+  }
 
   function pointInMarker(worldX, mouseY, marker) {
-    // radial check
     const dx = Math.abs(worldX - marker.x);
     const dy = Math.abs(mouseY - marker.y);
     if (Math.hypot(dx, dy) <= (marker.hitRadius || 0)) return true;
-    // rectangular check centered on marker
     const hw = (marker.hitBox && marker.hitBox.w) ? marker.hitBox.w / 2 : 0;
     const hh = (marker.hitBox && marker.hitBox.h) ? marker.hitBox.h / 2 : 0;
     if (dx <= hw && dy <= hh) return true;
     return false;
   }
+
+  let pending = false;
+  let lastEvent = null;
 
   function processMouse(e) {
     const rect = scroll.getBoundingClientRect();
@@ -582,15 +586,18 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
 
     const mouseY = e.clientY - rect.top;
 
-    // 1) Marker detection using larger hit area
+    // 1) Marker detection with larger hit area
     for (let m of markers) {
       if (pointInMarker(worldX, mouseY, m)) {
-        // marker hovered — show tooltip with marker color and draw colored dot
+        // marker hovered — gently center it if needed
         const visibleX = m.x - scroll.scrollLeft;
         const margin = 60;
         const viewportW = rect.width;
-        if (visibleX < margin) scroll.scrollLeft = Math.max(0, m.x - margin);
-        else if (visibleX > viewportW - margin) scroll.scrollLeft = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
+        let targetScroll = null;
+        if (visibleX < margin) targetScroll = Math.max(0, m.x - margin);
+        else if (visibleX > viewportW - margin) targetScroll = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
+
+        if (targetScroll !== null) easeTo(targetScroll, 0.18);
 
         const visibleX2 = m.x - scroll.scrollLeft;
         const bg = m.color || "#000";
@@ -601,7 +608,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
           <strong style="vertical-align:middle;color:${fg}">${m.type.toUpperCase()}</strong>
           <div style="color:${fg};margin-top:6px">${Math.round(m.temp)}${symbol}</div>
         `;
-
         tooltip.style.opacity = 1;
         tooltip.style.left = (visibleX2) + "px";
         tooltip.style.top = (m.y - 20) + "px";
@@ -617,12 +623,11 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
         ctx.beginPath();
         ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
         ctx.fill();
-
         return;
       }
     }
 
-    // 2) Line hover fallback
+    // 2) Line hover
     const idx = Math.round(worldX);
     const p = dense[idx];
     if (!p || p.y === null) {
@@ -640,12 +645,15 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       return;
     }
 
-    // dot visible — auto-scroll to keep it in view
+    // Dot visible — gently nudge scroll to keep it in view (only small adjustments)
     const margin = 60;
     const visibleX = p.x - scroll.scrollLeft;
     const viewportW = rect.width;
-    if (visibleX < margin) scroll.scrollLeft = Math.max(0, p.x - margin);
-    else if (visibleX > viewportW - margin) scroll.scrollLeft = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
+    let targetScroll = null;
+    if (visibleX < margin) targetScroll = Math.max(0, p.x - margin);
+    else if (visibleX > viewportW - margin) targetScroll = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
+
+    if (targetScroll !== null) easeTo(targetScroll, 0.18);
 
     const visibleX2 = p.x - scroll.scrollLeft;
     const hourIndex = Math.max(0, Math.min(temps.length - 1, Math.floor(p.x / hourWidth + 0.5)));
