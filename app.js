@@ -481,50 +481,53 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
 
   // -----------------------------
-  // Hover interaction
-  // -----------------------------
-  canvas.onmousemove = (e) => {
-    const rect = canvas.getBoundingClientRect();
+// Hover interaction (FIXED)
+// -----------------------------
+canvas.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
 
-    // Correct mouse X for scroll offset
-    const x = e.clientX - rect.left + scroll.scrollLeft;
+  // REAL canvas coordinates (fixes scaling issues)
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
 
-    // Find nearest point
-    let nearest = 0;
-    let bestDist = Infinity;
+  // Mouse position inside canvas
+  const x = (e.clientX - rect.left) * scaleX + scroll.scrollLeft * scaleX;
 
-    for (let i = 0; i < points.length; i++) {
-      const dx = Math.abs(points[i].x - x);
-      if (dx < bestDist) {
-        bestDist = dx;
-        nearest = i;
-      }
+  // Find nearest point
+  let nearest = 0;
+  let bestDist = Infinity;
+
+  for (let i = 0; i < points.length; i++) {
+    const dx = Math.abs(points[i].x - x);
+    if (dx < bestDist) {
+      bestDist = dx;
+      nearest = i;
     }
+  }
 
-    const p = points[nearest];
+  const p = points[nearest];
 
-    // Move cursor line
-    cursor.style.left = (p.x - scroll.scrollLeft) + "px";
-    cursor.style.top = rect.top + "px";
-    cursor.style.opacity = 1;
+  // Move cursor line
+  cursor.style.opacity = 1;
+  cursor.style.left = (p.x / scaleX - scroll.scrollLeft) + "px";
 
-    // Tooltip content
-    tooltip.innerHTML = `
-      <strong>${labels[nearest]}</strong><br>
-      ${Math.round(temps[nearest])}${symbol}<br>
-      ${conditions[nearest]}
-    `;
+  // Tooltip content
+  tooltip.innerHTML = `
+    <strong>${labels[nearest]}</strong><br>
+    ${Math.round(temps[nearest])}${symbol}<br>
+    ${conditions[nearest]}
+  `;
 
-    // Tooltip position
-    tooltip.style.left = (p.x - scroll.scrollLeft) + "px";
-    tooltip.style.top = (p.y - 20) + "px";
-    tooltip.style.opacity = 1;
-  };
+  // Tooltip position
+  tooltip.style.opacity = 1;
+  tooltip.style.left = (p.x / scaleX - scroll.scrollLeft) + "px";
+  tooltip.style.top = (p.y / scaleY) + "px";
+});
 
-  canvas.onmouseleave = () => {
-    tooltip.style.opacity = 0;
-    cursor.style.opacity = 0;
-  };
+canvas.addEventListener("mouseleave", () => {
+  tooltip.style.opacity = 0;
+  cursor.style.opacity = 0;
+});
 }
 
 function buildDaily(daily) {

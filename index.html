@@ -71,15 +71,18 @@
         <div class="forecast-panel">
           <div class="panel-title">Next 24 Hours</div>
 
-          <div id="hourlyScroll">
-            <div id="hourlyTooltip" class="hourly-tooltip"></div>
-            <div id="hourlyCursor" class="hourly-cursor"></div>
-            <div id="hourlyInner">
+          <!-- Tooltip + cursor MUST be outside the scroll container -->
+         <div id="hourlyTooltip" class="hourly-tooltip"></div>
+         <div id="hourlyCursor" class="hourly-cursor"></div>
+
+         <div id="hourlyScroll">
+           <div id="hourlyInner">
               <canvas id="hourlyChart"></canvas>
               <div id="forecast"></div>
-            </div>
+           </div>
           </div>
         </div>
+
 
         <!-- DAILY FORECAST -->
         <div class="forecast-panel forecast-panel-daily">
