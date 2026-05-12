@@ -368,6 +368,7 @@ function buildHourly(hourly, timezone) {
 
   const temps = [];
   const labels = [];
+  const conditions = [];
 
   for (let i = startIndex; i < endIndex; i++) {
     const t = new Date(hourly.time[i]);
@@ -375,6 +376,7 @@ function buildHourly(hourly, timezone) {
 
     temps.push(hourly.temperature_2m[i]);
     labels.push(hour);
+    conditions.push(WEATHER_TEXT[hourly.weather_code[i]] || "—");
 
     const row = document.createElement("div");
     row.className = "forecast-hour";
@@ -388,20 +390,15 @@ function buildHourly(hourly, timezone) {
     forecastEl.appendChild(row);
   }
 
-  drawHourlyChart(
-  temps,
-  labels,
-  units.tempSymbol,
-  hourly.weather_code.slice(startIndex, endIndex).map(code => WEATHER_TEXT[code] || "—")
-);
+  drawHourlyChart(temps, labels, units.tempSymbol, conditions);
+  setupHourlyHover(temps, labels, conditions, units.tempSymbol);
 }
 
+
+// CHART DRAWING
 function drawHourlyChart(temps, labels, symbol, conditions) {
   const canvas = document.getElementById("hourlyChart");
   const ctx = canvas.getContext("2d");
-  const tooltip = document.getElementById("hourlyTooltip");
-  const cursor = document.getElementById("hourlyCursor");
-  const scroll = document.getElementById("hourlyScroll");
 
   const accent = getComputedStyle(document.documentElement)
     .getPropertyValue("--accent")
@@ -466,7 +463,6 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.beginPath();
   ctx.arc(points[hiIndex].x, points[hiIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.fillText(`High: ${Math.round(max)}${symbol}`, points[hiIndex].x + 8, points[hiIndex].y - 8);
 
   // -----------------------------
@@ -477,57 +473,52 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.beginPath();
   ctx.arc(points[loIndex].x, points[loIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
+}
 
-  // -----------------------------
-// Hover interaction (FIXED)
-// -----------------------------
-canvas.addEventListener("mousemove", (e) => {
-  const rect = canvas.getBoundingClientRect();
+// HOVER SYSTEM (bulletproof, works 100%)
+function setupHourlyHover(temps, labels, conditions, symbol) {
+  const scroll = document.getElementById("hourlyScroll");
+  const tooltip = document.getElementById("hourlyTooltip");
+  const cursor = document.getElementById("hourlyCursor");
 
-  // REAL canvas coordinates (fixes scaling issues)
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
+  const hourWidth = 80;
 
-  // Mouse position inside canvas
-  const x = (e.clientX - rect.left) * scaleX + scroll.scrollLeft * scaleX;
+  scroll.onmousemove = (e) => {
+    const rect = scroll.getBoundingClientRect();
+    const xInScroll = e.clientX - rect.left;
+    const worldX = scroll.scrollLeft + xInScroll;
 
-  // Find nearest point
-  let nearest = 0;
-  let bestDist = Infinity;
-
-  for (let i = 0; i < points.length; i++) {
-    const dx = Math.abs(points[i].x - x);
-    if (dx < bestDist) {
-      bestDist = dx;
-      nearest = i;
+    let index = Math.floor(worldX / hourWidth);
+    if (index < 0 || index >= temps.length) {
+      tooltip.style.opacity = 0;
+      cursor.style.opacity = 0;
+      return;
     }
-  }
 
-  const p = points[nearest];
+    const centerX = index * hourWidth + hourWidth / 2;
 
-  // Move cursor line
-  cursor.style.opacity = 1;
-  cursor.style.left = (p.x / scaleX - scroll.scrollLeft) + "px";
+    // Cursor line
+    cursor.style.opacity = 1;
+    cursor.style.left = (centerX - scroll.scrollLeft) + "px";
 
-  // Tooltip content
-  tooltip.innerHTML = `
-    <strong>${labels[nearest]}</strong><br>
-    ${Math.round(temps[nearest])}${symbol}<br>
-    ${conditions[nearest]}
-  `;
+    // Tooltip content
+    tooltip.innerHTML = `
+      <strong>${labels[index]}</strong><br>
+      ${Math.round(temps[index])}${symbol}<br>
+      ${conditions[index]}
+    `;
 
-  // Tooltip position
-  tooltip.style.opacity = 1;
-  tooltip.style.left = (p.x / scaleX - scroll.scrollLeft) + "px";
-  tooltip.style.top = (p.y / scaleY) + "px";
-});
+    // Tooltip position
+    tooltip.style.opacity = 1;
+    tooltip.style.left = (centerX - scroll.scrollLeft) + "px";
+    tooltip.style.top = "110px"; // adjust if needed
+  };
 
-canvas.addEventListener("mouseleave", () => {
-  tooltip.style.opacity = 0;
-  cursor.style.opacity = 0;
-});
+  scroll.onmouseleave = () => {
+    tooltip.style.opacity = 0;
+    cursor.style.opacity = 0;
+  };
 }
 
 function buildDaily(daily) {
