@@ -407,7 +407,6 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   const hourWidth = 80;
   const totalWidth = hourWidth * temps.length;
 
-  // devicePixelRatio handling
   const DPR = window.devicePixelRatio || 1;
   canvas.style.width = totalWidth + "px";
   canvas.style.height = "120px";
@@ -425,7 +424,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
 
   ctx.clearRect(0, 0, w, h);
 
-  // Build dense polyline aligned to hour centers
+  // dense polyline aligned to hour centers
   const dense = new Array(w);
   for (let worldX = 0; worldX < w; worldX++) {
     const hourIndex = (worldX - hourWidth / 2) / hourWidth;
@@ -445,7 +444,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     dense[worldX] = { x: worldX, y };
   }
 
-  // Draw the line
+  // draw the line
   ctx.beginPath();
   ctx.lineWidth = 3;
   ctx.strokeStyle = accent;
@@ -459,14 +458,14 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   }
   ctx.stroke();
 
-  // Compute hour-center points for markers
+  // compute hour-center points for markers
   const points = temps.map((t, i) => {
     const x = i * hourWidth + hourWidth / 2;
     const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
     return { x, y, temp: t, index: i };
   });
 
-  // Prepare markers array (we'll save this for hover detection)
+  // prepare markers array with larger hit area
   const markers = [];
 
   // High marker
@@ -478,13 +477,18 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.fillText(`High: ${Math.round(max)}${symbol}`, points[hiIndex].x + 8, points[hiIndex].y - 8);
+
+  // Save a larger hit area for the high marker
   markers.push({
     type: "high",
     x: points[hiIndex].x,
     y: points[hiIndex].y,
     color: hiColor,
     temp: max,
-    index: hiIndex
+    index: hiIndex,
+    // hitRadius for circular detection and hitBox for rectangular detection
+    hitRadius: 18,            // radial hit area
+    hitBox: { w: 36, h: 36 } // width/height centered on marker
   });
 
   // Low marker
@@ -496,16 +500,19 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
+
   markers.push({
     type: "low",
     x: points[loIndex].x,
     y: points[loIndex].y,
     color: loColor,
     temp: min,
-    index: loIndex
+    index: loIndex,
+    hitRadius: 18,
+    hitBox: { w: 36, h: 36 }
   });
 
-  // Cache base image and data for hover
+  // cache base image and data for hover
   const baseImage = ctx.getImageData(0, 0, Math.round(w * DPR), Math.round(h * DPR));
   canvas._baseImage = baseImage;
   canvas._densePoints = dense;
@@ -531,21 +538,17 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     ctx.putImageData(canvas._baseImage, 0, 0);
   }
 
-  // contrast helper: returns '#000' or '#fff' depending on which contrasts better with hex color
   function contrastColor(hex) {
     if (!hex) return "#fff";
-    // normalize short form
     if (hex[0] === "#") hex = hex.slice(1);
     if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
     const r = parseInt(hex.substr(0,2), 16);
     const g = parseInt(hex.substr(2,2), 16);
     const b = parseInt(hex.substr(4,2), 16);
-    // luminance
     const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     return lum > 150 ? "#000" : "#fff";
   }
 
-  // reset tooltip visual styles to defaults
   function resetTooltipStyle() {
     tooltip.style.background = "";
     tooltip.style.color = "";
@@ -557,6 +560,18 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   let pending = false;
   let lastEvent = null;
 
+  function pointInMarker(worldX, mouseY, marker) {
+    // radial check
+    const dx = Math.abs(worldX - marker.x);
+    const dy = Math.abs(mouseY - marker.y);
+    if (Math.hypot(dx, dy) <= (marker.hitRadius || 0)) return true;
+    // rectangular check centered on marker
+    const hw = (marker.hitBox && marker.hitBox.w) ? marker.hitBox.w / 2 : 0;
+    const hh = (marker.hitBox && marker.hitBox.h) ? marker.hitBox.h / 2 : 0;
+    if (dx <= hw && dy <= hh) return true;
+    return false;
+  }
+
   function processMouse(e) {
     const rect = scroll.getBoundingClientRect();
     const xInScroll = e.clientX - rect.left;
@@ -565,14 +580,12 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     if (worldX < 0) worldX = 0;
     if (worldX >= dense.length) worldX = dense.length - 1;
 
-    // 1) Marker hover detection
-    const markerThreshold = 12; // px
+    const mouseY = e.clientY - rect.top;
+
+    // 1) Marker detection using larger hit area
     for (let m of markers) {
-      const dx = Math.abs(worldX - m.x);
-      const mouseY = e.clientY - rect.top;
-      const dy = Math.abs(mouseY - m.y);
-      if (dx <= markerThreshold && dy <= markerThreshold) {
-        // marker hovered
+      if (pointInMarker(worldX, mouseY, m)) {
+        // marker hovered — show tooltip with marker color and draw colored dot
         const visibleX = m.x - scroll.scrollLeft;
         const margin = 60;
         const viewportW = rect.width;
@@ -580,8 +593,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
         else if (visibleX > viewportW - margin) scroll.scrollLeft = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
 
         const visibleX2 = m.x - scroll.scrollLeft;
-
-        // style tooltip with marker color
         const bg = m.color || "#000";
         const fg = contrastColor(bg);
 
@@ -591,7 +602,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
           <div style="color:${fg};margin-top:6px">${Math.round(m.temp)}${symbol}</div>
         `;
 
-        // apply tooltip styling
         tooltip.style.opacity = 1;
         tooltip.style.left = (visibleX2) + "px";
         tooltip.style.top = (m.y - 20) + "px";
@@ -602,7 +612,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
         tooltip.style.boxShadow = "0 6px 18px rgba(0,0,0,0.18)";
         tooltip.style.border = "1px solid rgba(0,0,0,0.08)";
 
-        // draw marker-colored dot on canvas
         restoreBase();
         ctx.fillStyle = m.color;
         ctx.beginPath();
@@ -613,7 +622,7 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       }
     }
 
-    // 2) Line hover fallback (unchanged behavior)
+    // 2) Line hover fallback
     const idx = Math.round(worldX);
     const p = dense[idx];
     if (!p || p.y === null) {
@@ -623,7 +632,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       return;
     }
 
-    const mouseY = e.clientY - rect.top;
     const visibleThreshold = 25;
     if (Math.abs(mouseY - p.y) > visibleThreshold) {
       tooltip.style.opacity = 0;
@@ -642,7 +650,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const visibleX2 = p.x - scroll.scrollLeft;
     const hourIndex = Math.max(0, Math.min(temps.length - 1, Math.floor(p.x / hourWidth + 0.5)));
 
-    // reset tooltip style for normal line hover
     resetTooltipStyle();
     tooltip.innerHTML = `
       <strong>${labels[hourIndex]}</strong><br>
