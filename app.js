@@ -483,7 +483,16 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const worldX = scroll.scrollLeft + xInScroll;
 
     // -----------------------------
-    // 1. Find the two points around the cursor
+    // AUTO-SCROLL WHEN NEAR EDGES
+    // -----------------------------
+    const edge = 80;
+    const speed = 8;
+
+    if (xInScroll < edge) scroll.scrollLeft -= speed;
+    else if (xInScroll > rect.width - edge) scroll.scrollLeft += speed;
+
+    // -----------------------------
+    // FIND WHICH TWO POINTS SURROUND THE CURSOR
     // -----------------------------
     let i = Math.floor(worldX / hourWidth);
     if (i < 0 || i >= points.length - 1) {
@@ -496,31 +505,29 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const p2 = points[i + 1];
 
     // -----------------------------
-    // 2. Interpolate Y at EXACT cursor X
+    // TRUE INTERPOLATION USING CURSOR X
     // -----------------------------
     const t = (worldX - p1.x) / (p2.x - p1.x);
-    const interpX = worldX;
-    const interpY = p1.y + (p2.y - p1.y) * t;
+    const interpX = worldX;              // EXACT cursor X
+    const interpY = p1.y + (p2.y - p1.y) * t; // LINE Y at cursor X
 
     // -----------------------------
-    // 3. Check if cursor is close enough to the line
+    // CHECK IF CURSOR IS CLOSE TO THE LINE
     // -----------------------------
     const mouseY = e.clientY - rect.top;
-    const dist = Math.abs(mouseY - interpY);
-
-    if (dist > 25) {
+    if (Math.abs(mouseY - interpY) > 25) {
       tooltip.style.opacity = 0;
       drawHourlyChart(temps, labels, symbol, conditions);
       return;
     }
 
     // -----------------------------
-    // 4. Determine hour segment for tooltip
+    // DETERMINE HOUR FOR TOOLTIP
     // -----------------------------
     const hourIndex = Math.floor(worldX / hourWidth);
 
     // -----------------------------
-    // 5. Tooltip
+    // TOOLTIP
     // -----------------------------
     tooltip.innerHTML = `
       <strong>${labels[hourIndex]}</strong><br>
@@ -533,7 +540,7 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     tooltip.style.top = (interpY - 20) + "px";
 
     // -----------------------------
-    // 6. Draw dot EXACTLY under cursor
+    // DRAW DOT EXACTLY UNDER CURSOR
     // -----------------------------
     drawHourlyChart(temps, labels, symbol, conditions);
 
