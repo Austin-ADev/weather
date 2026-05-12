@@ -396,43 +396,44 @@ function buildHourly(hourly, timezone) {
 
 
 // CHART DRAWING
-function drawHourlyChart(temps, labels, symbol, conditions) {
+// Replace your existing drawHourlyChart with this version.
+// It builds a dense polyline, draws markers, saves a device-pixel base snapshot (ImageBitmap + ImageData),
+// and stores all data the hover handler needs on the canvas element.
+async function drawHourlyChart(temps, labels, symbol, conditions) {
   const canvas = document.getElementById("hourlyChart");
   const ctx = canvas.getContext("2d");
 
-  const accent = getComputedStyle(document.documentElement)
-    .getPropertyValue("--accent")
-    .trim() || "#4fd1ff";
-
   const hourWidth = 80;
   const totalWidth = hourWidth * temps.length;
+  const cssHeight = 120;
 
+  // devicePixelRatio handling
   const DPR = window.devicePixelRatio || 1;
   canvas.style.width = totalWidth + "px";
-  canvas.style.height = "120px";
+  canvas.style.height = cssHeight + "px";
   canvas.width = Math.round(totalWidth * DPR);
-  canvas.height = Math.round(120 * DPR);
+  canvas.height = Math.round(cssHeight * DPR);
+  // set transform so drawing uses CSS pixels
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
   const w = totalWidth;
-  const h = 120;
+  const h = cssHeight;
+  const pad = 20;
 
+  // compute min/max
   const max = Math.max(...temps);
   const min = Math.min(...temps);
 
-  const pad = 20;
-
-  ctx.clearRect(0, 0, w, h);
-
-  // Build dense polyline so worldX (0..w) maps directly to fractional hour index = x/hourWidth
+  // dense polyline: sample every CSS pixel across 0..w
   const dense = new Array(w);
   for (let x = 0; x < w; x++) {
-    const hourIndex = x / hourWidth;           // <-- maps 0 -> first hour, w -> last hour
+    // map x -> fractional hour index so line reaches both box edges
+    const hourIndex = x / hourWidth;
     const i = Math.floor(hourIndex);
 
     if (i < 0) { dense[x] = { x, y: null }; continue; }
     if (i >= temps.length - 1) {
-      // at or beyond last hour, clamp to last hour value
+      // clamp to last hour
       const yLast = h - pad - ((temps[temps.length - 1] - min) / (max - min)) * (h - pad * 2);
       dense[x] = { x, y: yLast };
       continue;
@@ -445,10 +446,11 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     dense[x] = { x, y };
   }
 
-  // Draw the line
+  // draw polyline
+  ctx.clearRect(0, 0, w, h);
   ctx.beginPath();
   ctx.lineWidth = 3;
-  ctx.strokeStyle = accent;
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4fd1ff";
   let started = false;
   for (let i = 0; i < dense.length; i++) {
     const p = dense[i];
@@ -458,17 +460,15 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   }
   ctx.stroke();
 
-  // Hour-center points for markers (centers still at i*hourWidth + hourWidth/2)
+  // compute hour-center points for markers (centers at i*hourWidth + hourWidth/2)
   const points = temps.map((t, i) => {
     const x = i * hourWidth + hourWidth / 2;
     const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
     return { x, y, temp: t, index: i };
   });
 
-  // Markers with larger hit area
+  // draw and save markers with generous hit areas
   const markers = [];
-
-  // High
   const hiIndex = temps.indexOf(max);
   const hiColor = "#bd1818";
   ctx.fillStyle = hiColor;
@@ -488,7 +488,6 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     hitBox: { w: 40, h: 40 }
   });
 
-  // Low
   const loIndex = temps.indexOf(min);
   const loColor = "#183eb9fa";
   ctx.fillStyle = loColor;
@@ -508,35 +507,72 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     hitBox: { w: 40, h: 40 }
   });
 
-  // Cache base image and data for hover
-  const baseImage = ctx.getImageData(0, 0, Math.round(w * DPR), Math.round(h * DPR));
-  canvas._baseImage = baseImage;
+  // cache base image (ImageData) and create ImageBitmap snapshot for robust restore
+  try {
+    canvas._baseImage = ctx.getImageData(0, 0, Math.round(w * DPR), Math.round(h * DPR));
+  } catch (e) {
+    // ignore if readback fails
+    canvas._baseImage = null;
+  }
+
+  // create ImageBitmap snapshot asynchronously and store it
+  try {
+    // createImageBitmap accepts the canvas and captures device pixels
+    const bitmap = await createImageBitmap(canvas);
+    canvas._baseBitmap = bitmap;
+  } catch (e) {
+    canvas._baseBitmap = null;
+  }
+
+  // store data for hover handler
   canvas._densePoints = dense;
+  canvas._markers = markers;
   canvas._hourWidth = hourWidth;
   canvas._DPR = DPR;
-  canvas._markers = markers;
 }
 
 // HOVER SYSTEM (with hover dot)
+// Replace your existing setupHourlyHover with this version.
+// It attaches pointer handlers to the canvas, supports mouse hover and pointer drag (touch/pen),
+// uses ImageBitmap-based restore (if available), eases auto-scroll slowly, and highlights markers with colored tooltips.
 function setupHourlyHover(temps, labels, conditions, symbol) {
   const scroll = document.getElementById("hourlyScroll");
   const tooltip = document.getElementById("hourlyTooltip");
   const canvas = document.getElementById("hourlyChart");
+  if (!canvas || !scroll || !tooltip) return;
   const ctx = canvas.getContext("2d");
 
-  if (!canvas._densePoints) drawHourlyChart(temps, labels, symbol, conditions);
-
-  const dense = canvas._densePoints || [];
-  const hourWidth = canvas._hourWidth || 80;
-  const markers = canvas._markers || [];
-
-  // restore base image (device pixels)
-  function restoreBase() {
-    if (!canvas._baseImage) return;
-    ctx.putImageData(canvas._baseImage, 0, 0);
+  // ensure chart data exists
+  if (!canvas._densePoints) {
+    // synchronous fallback: redraw chart once (caller should normally call drawHourlyChart first)
+    drawHourlyChart(temps, labels, symbol, conditions);
   }
 
-  // small safe contrast helper
+  const dense = canvas._densePoints || [];
+  const markers = canvas._markers || [];
+  const hourWidth = canvas._hourWidth || 80;
+
+  // robust restore: prefer ImageBitmap, fallback to ImageData
+  function restoreBase() {
+    if (canvas._baseBitmap) {
+      // draw bitmap at device-pixel size; reset transform to avoid DPR issues
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(canvas._baseBitmap, 0, 0, canvas.width, canvas.height);
+      const DPR = canvas._DPR || window.devicePixelRatio || 1;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.restore();
+      return true;
+    }
+    if (canvas._baseImage) {
+      try { ctx.putImageData(canvas._baseImage, 0, 0); return true; }
+      catch (e) { /* ignore */ }
+    }
+    return false;
+  }
+
+  // contrast helper
   function contrastColor(hex) {
     if (!hex) return "#fff";
     if (hex[0] === "#") hex = hex.slice(1);
@@ -546,19 +582,19 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     return lum > 150 ? "#000" : "#fff";
   }
 
-  // smooth scroll loop
+  // smooth scroll loop (RAF-based) to avoid racing with pointer coords
   let scrollTarget = null;
-  let scrolling = false;
+  let scrollAnimating = false;
   function easeScrollTo(target) {
     scrollTarget = Math.max(0, Math.min(canvas.width - scroll.clientWidth, target));
-    if (scrolling) return;
-    scrolling = true;
+    if (scrollAnimating) return;
+    scrollAnimating = true;
     (function step() {
-      if (scrollTarget === null) { scrolling = false; return; }
+      if (scrollTarget === null) { scrollAnimating = false; return; }
       const cur = scroll.scrollLeft;
       const d = scrollTarget - cur;
-      const f = 0.12;
-      if (Math.abs(d) < 0.5) { scroll.scrollLeft = scrollTarget; scrollTarget = null; scrolling = false; return; }
+      const f = 0.12; // smaller = slower
+      if (Math.abs(d) < 0.5) { scroll.scrollLeft = scrollTarget; scrollTarget = null; scrollAnimating = false; return; }
       scroll.scrollLeft = cur + d * f;
       requestAnimationFrame(step);
     })();
@@ -568,15 +604,16 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const dx = Math.abs(worldX - marker.x);
     const dy = Math.abs(mouseY - marker.y);
     if (Math.hypot(dx, dy) <= (marker.hitRadius || 0)) return true;
-    const hw = (marker.hitBox && marker.hitBox.w) ? marker.hitBox.w/2 : 0;
-    const hh = (marker.hitBox && marker.hitBox.h) ? marker.hitBox.h/2 : 0;
+    const hw = (marker.hitBox && marker.hitBox.w) ? marker.hitBox.w / 2 : 0;
+    const hh = (marker.hitBox && marker.hitBox.h) ? marker.hitBox.h / 2 : 0;
     return dx <= hw && dy <= hh;
   }
 
-  // worldX is CSS pixels relative to canvas left + scrollLeft
+  // core interaction: worldX in CSS pixels relative to canvas left + scrollLeft,
+  // clientY must be canvas-local Y (ev.clientY - rect.top)
   function handleInteraction(worldX, clientY, allowAutoScroll = true) {
-    if (worldX < 0) worldX = 0;
-    if (worldX >= dense.length) worldX = dense.length - 1;
+    if (!dense || dense.length === 0) { tooltip.style.opacity = 0; return { hit: false }; }
+    worldX = Math.max(0, Math.min(dense.length - 1, worldX));
     const mouseY = clientY;
 
     // marker priority
@@ -589,11 +626,13 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
           if (visibleX < margin) easeScrollTo(Math.max(0, m.x - margin));
           else if (visibleX > vw - margin) easeScrollTo(Math.min(canvas.width - vw, m.x - (vw - margin)));
         }
+
         const visibleX2 = m.x - scroll.scrollLeft;
         const bg = m.color || "#000";
         const fg = contrastColor(bg);
-        tooltip.innerHTML = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${bg};margin-right:8px"></span>
-          <strong style="color:${fg}">${m.type.toUpperCase()}</strong><div style="color:${fg};margin-top:6px">${Math.round(m.temp)}${symbol}</div>`;
+        tooltip.innerHTML = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${bg};margin-right:8px;vertical-align:middle;border:1px solid rgba(0,0,0,0.12)"></span>
+          <strong style="vertical-align:middle;color:${fg}">${m.type.toUpperCase()}</strong>
+          <div style="color:${fg};margin-top:6px">${Math.round(m.temp)}${symbol}</div>`;
         tooltip.style.left = visibleX2 + "px";
         tooltip.style.top = (m.y - 20) + "px";
         tooltip.style.background = bg;
@@ -602,11 +641,18 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
         tooltip.style.borderRadius = "6px";
         tooltip.style.boxShadow = "0 6px 18px rgba(0,0,0,0.18)";
         tooltip.style.opacity = 1;
+
+        // restore and draw marker-colored dot AFTER restore
         restoreBase();
+        const DPR = canvas._DPR || window.devicePixelRatio || 1;
+        ctx.save();
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
         ctx.fillStyle = m.color;
         ctx.beginPath();
-        ctx.arc(m.x, m.y, 6, 0, Math.PI*2);
+        ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
+
         return { hit: true, type: "marker", marker: m };
       }
     }
@@ -614,13 +660,24 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     // line detection
     const idx = Math.round(worldX);
     const p = dense[idx];
-    if (!p || p.y === null) { tooltip.style.opacity = 0; restoreBase(); return { hit: false }; }
-    const visibleThreshold = 25;
-    if (Math.abs(mouseY - p.y) > visibleThreshold) { tooltip.style.opacity = 0; restoreBase(); return { hit: false }; }
+    if (!p || p.y === null) {
+      tooltip.style.opacity = 0;
+      restoreBase();
+      return { hit: false };
+    }
 
+    // slightly larger threshold to avoid jitter hiding
+    const visibleThreshold = 40;
+    if (Math.abs(mouseY - p.y) > visibleThreshold) {
+      tooltip.style.opacity = 0;
+      restoreBase();
+      return { hit: false };
+    }
+
+    // auto-scroll gently to keep dot visible
     if (allowAutoScroll) {
-      const margin = 60;
       const visibleX = p.x - scroll.scrollLeft;
+      const margin = 60;
       const vw = scroll.clientWidth;
       if (visibleX < margin) easeScrollTo(Math.max(0, p.x - margin));
       else if (visibleX > vw - margin) easeScrollTo(Math.min(canvas.width - vw, p.x - (vw - margin)));
@@ -636,16 +693,26 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     tooltip.style.color = "";
     tooltip.style.padding = "";
     tooltip.style.boxShadow = "";
+
+    // restore and draw white dot AFTER restore
     restoreBase();
+    const DPR = canvas._DPR || window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
+    ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
     ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(0,0,0,0.18)";
+    ctx.stroke();
+    ctx.restore();
+
     return { hit: true, type: "line", point: p };
   }
 
-  // pointer handling attached to canvas for consistent coords
-  let dragging = false;
+  // pointer handling (attached to canvas for consistent coords)
+  let isDragging = false;
   let activePointerId = null;
 
   function onPointerDown(ev) {
@@ -655,17 +722,18 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const worldX = scroll.scrollLeft + xInCanvas;
     const canvasY = ev.clientY - rect.top;
 
-    // start drag only if near line or marker
+    // test hit without auto-scroll to decide whether to start drag
     const res = handleInteraction(worldX, canvasY, false);
     if (res.hit) {
-      dragging = true;
+      isDragging = true;
       activePointerId = ev.pointerId;
       try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
       ev.preventDefault();
-    } else {
-      // if mouse and not dragging, still show hover without starting drag
-      if (ev.pointerType === "mouse") handleInteraction(worldX, ev.clientY, true);
+      return;
     }
+
+    // if mouse and not starting drag, still show hover
+    if (ev.pointerType === "mouse") handleInteraction(worldX, ev.clientY, true);
   }
 
   function onPointerMove(ev) {
@@ -674,21 +742,19 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const worldX = scroll.scrollLeft + xInCanvas;
     const canvasY = ev.clientY - rect.top;
 
-    if (dragging) {
+    if (isDragging) {
       if (ev.pointerId !== activePointerId) return;
       ev.preventDefault();
       handleInteraction(worldX, ev.clientY, true);
       return;
     }
 
-    if (ev.pointerType === "mouse") {
-      handleInteraction(worldX, ev.clientY, true);
-    }
+    if (ev.pointerType === "mouse") handleInteraction(worldX, ev.clientY, true);
   }
 
-  function endPointer(ev) {
-    if (dragging && ev.pointerId === activePointerId) {
-      dragging = false;
+  function onPointerUp(ev) {
+    if (isDragging && ev.pointerId === activePointerId) {
+      isDragging = false;
       activePointerId = null;
       try { canvas.releasePointerCapture && canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
       tooltip.style.opacity = 0;
@@ -696,15 +762,32 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     }
   }
 
+  // attach listeners (remove previous handlers if present)
+  if (canvas._hourlyHandlers) {
+    canvas.removeEventListener("pointerdown", canvas._hourlyHandlers.down);
+    window.removeEventListener("pointermove", canvas._hourlyHandlers.move);
+    window.removeEventListener("pointerup", canvas._hourlyHandlers.up);
+    window.removeEventListener("pointercancel", canvas._hourlyHandlers.up);
+  }
+
+  canvas._hourlyHandlers = {
+    down: onPointerDown,
+    move: onPointerMove,
+    up: onPointerUp
+  };
+
   canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
   window.addEventListener("pointermove", onPointerMove, { passive: false });
-  window.addEventListener("pointerup", endPointer, { passive: true });
-  window.addEventListener("pointercancel", endPointer, { passive: true });
+  window.addEventListener("pointerup", onPointerUp, { passive: true });
+  window.addEventListener("pointercancel", onPointerUp, { passive: true });
+
   canvas.addEventListener("pointerleave", () => {
-    if (!dragging) { tooltip.style.opacity = 0; restoreBase(); }
+    if (!isDragging) {
+      tooltip.style.opacity = 0;
+      restoreBase();
+    }
   }, { passive: true });
 }
-
 
 // DAILY FORECAST
 function buildDaily(daily) {
