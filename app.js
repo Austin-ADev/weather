@@ -529,7 +529,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   const DPR = canvas._DPR || 1;
   const markers = canvas._markers || [];
 
-  // helpers
   function restoreBase() {
     if (!canvas._baseImage) return;
     ctx.putImageData(canvas._baseImage, 0, 0);
@@ -553,7 +552,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     tooltip.style.borderRadius = "";
   }
 
-  // easing scroll helper (gentle)
   function easeTo(target, factor = 0.12) {
     const current = scroll.scrollLeft;
     const delta = target - current;
@@ -571,24 +569,15 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     return false;
   }
 
-  // state for touch dragging
-  let dragging = false;
-  let dragType = null; // "marker" or "line"
-  let dragMarker = null;
-  let activeTouchId = null;
-
-  // shared mouse/touch processing (computes worldX, shows tooltip/dot)
+  // shared interaction logic
   function handleInteraction(worldX, clientY, allowAutoScroll = true) {
-    // clamp
     if (worldX < 0) worldX = 0;
     if (worldX >= dense.length) worldX = dense.length - 1;
-
     const mouseY = clientY;
 
-    // 1) marker detection
+    // marker detection
     for (let m of markers) {
       if (pointInMarker(worldX, mouseY, m)) {
-        // marker hovered/dragged
         const visibleX = m.x - scroll.scrollLeft;
         const margin = 60;
         const viewportW = scroll.getBoundingClientRect().width;
@@ -598,7 +587,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
           else if (visibleX > viewportW - margin) target = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
           if (target !== null) easeTo(target, 0.12);
         }
-
         const visibleX2 = m.x - scroll.scrollLeft;
         const bg = m.color || "#000";
         const fg = contrastColor(bg);
@@ -628,7 +616,7 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       }
     }
 
-    // 2) line detection
+    // line detection
     const idx = Math.round(worldX);
     const p = dense[idx];
     if (!p || p.y === null) {
@@ -646,7 +634,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       return { hit: false };
     }
 
-    // dot visible — auto-scroll gently if allowed
     if (allowAutoScroll) {
       const margin = 60;
       const visibleX = p.x - scroll.scrollLeft;
@@ -679,50 +666,31 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     return { hit: true, type: "line", point: p };
   }
 
-  // ---------- Desktop mouse handlers (unchanged behavior) ----------
-  let pending = false;
-  let lastMouseEvent = null;
-  scroll.onmousemove = (e) => {
-    // ignore mouse events while dragging on touch
-    if (dragging) return;
-    lastMouseEvent = e;
-    if (!pending) {
-      pending = true;
-      requestAnimationFrame(() => {
-        const rect = scroll.getBoundingClientRect();
-        const xInScroll = lastMouseEvent.clientX - rect.left;
-        const worldX = scroll.scrollLeft + xInScroll;
-        handleInteraction(worldX, lastMouseEvent.clientY, true);
-        pending = false;
-      });
-    }
-  };
-  scroll.onmouseleave = () => {
-    if (dragging) return;
-    tooltip.style.opacity = 0;
-    resetTooltipStyle();
-    restoreBase();
-  };
+  // ---------- Pointer event handling (works for mouse, touch, pen) ----------
+  let isDragging = false;
+  let activePointerId = null;
+  let dragMode = null; // "marker" or "line"
+  let dragMarker = null;
 
-  // ---------- Touch handlers for mobile drag ----------
-  // touchstart: only begin dragging if touch starts near line or marker
-  scroll.addEventListener("touchstart", (ev) => {
-    if (!ev.touches || ev.touches.length === 0) return;
-    const t = ev.touches[0];
+  // pointerdown: decide whether to start drag (touch/pen) or treat as hover (mouse)
+  function onPointerDown(ev) {
+    // only left button for mouse
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
     const rect = scroll.getBoundingClientRect();
-    const xInScroll = t.clientX - rect.left;
+    const xInScroll = ev.clientX - rect.left;
     const worldX = scroll.scrollLeft + xInScroll;
-    const mouseY = t.clientY - rect.top;
+    const mouseY = ev.clientY - rect.top;
 
-    // test marker first
+    // test markers first
     for (let m of markers) {
       if (pointInMarker(worldX, mouseY, m)) {
-        dragging = true;
-        dragType = "marker";
+        isDragging = true;
+        activePointerId = ev.pointerId;
+        dragMode = "marker";
         dragMarker = m;
-        activeTouchId = t.identifier;
+        ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId);
         ev.preventDefault();
-        handleInteraction(worldX, mouseY, true);
+        handleInteraction(worldX, ev.clientY, true);
         return;
       }
     }
@@ -730,61 +698,69 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     // test line proximity
     const idx = Math.round(worldX);
     const p = dense[idx];
-    if (p && p.y !== null && Math.abs(mouseY - p.y) <= 25) {
-      dragging = true;
-      dragType = "line";
+    if (p && p.y !== null && Math.abs((ev.clientY - rect.top) - p.y) <= 25) {
+      isDragging = true;
+      activePointerId = ev.pointerId;
+      dragMode = "line";
       dragMarker = null;
-      activeTouchId = t.identifier;
+      ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId);
       ev.preventDefault();
-      handleInteraction(worldX, mouseY, true);
+      handleInteraction(worldX, ev.clientY, true);
       return;
     }
 
-    // otherwise do not start dragging; allow normal page scroll
-  }, { passive: false });
-
-  // touchmove: if dragging, update dot position and slowly auto-scroll
-  scroll.addEventListener("touchmove", (ev) => {
-    if (!dragging) return;
-    // find the active touch
-    let touch = null;
-    for (let i = 0; i < ev.touches.length; i++) {
-      if (ev.touches[i].identifier === activeTouchId) { touch = ev.touches[i]; break; }
-    }
-    if (!touch) return;
-    ev.preventDefault(); // prevent page scroll while dragging
-
-    const rect = scroll.getBoundingClientRect();
-    const xInScroll = touch.clientX - rect.left;
-    let worldX = scroll.scrollLeft + xInScroll;
-    const mouseY = touch.clientY - rect.top;
-
-    // When dragging, we want slower auto-scroll. allowAutoScroll true but easing will be gentle.
-    handleInteraction(worldX, touch.clientY, true);
-  }, { passive: false });
-
-  // touchend / touchcancel: stop dragging
-  function endTouch(ev) {
-    // if the active touch ended, stop dragging
-    if (!dragging) return;
-    // if there are still touches, check if activeTouchId remains
-    if (ev.touches && ev.touches.length > 0) {
-      let stillActive = false;
-      for (let i = 0; i < ev.touches.length; i++) {
-        if (ev.touches[i].identifier === activeTouchId) { stillActive = true; break; }
-      }
-      if (stillActive) return; // still dragging
-    }
-    dragging = false;
-    dragType = null;
-    dragMarker = null;
-    activeTouchId = null;
-    tooltip.style.opacity = 0;
-    resetTooltipStyle();
-    restoreBase();
+    // if mouse, still allow hover behavior; if touch/pen and not near line, do nothing (allow page scroll)
   }
-  scroll.addEventListener("touchend", endTouch, { passive: true });
-  scroll.addEventListener("touchcancel", endTouch, { passive: true });
+
+  function onPointerMove(ev) {
+    // if dragging, only respond to the active pointer
+    if (isDragging) {
+      if (ev.pointerId !== activePointerId) return;
+      const rect = scroll.getBoundingClientRect();
+      const xInScroll = ev.clientX - rect.left;
+      const worldX = scroll.scrollLeft + xInScroll;
+      ev.preventDefault();
+      handleInteraction(worldX, ev.clientY, true);
+      return;
+    }
+
+    // not dragging: for mouse pointer, treat as hover
+    if (ev.pointerType === "mouse") {
+      const rect = scroll.getBoundingClientRect();
+      const xInScroll = ev.clientX - rect.left;
+      const worldX = scroll.scrollLeft + xInScroll;
+      handleInteraction(worldX, ev.clientY, true);
+    }
+  }
+
+  function endPointer(ev) {
+    if (isDragging && ev.pointerId === activePointerId) {
+      isDragging = false;
+      activePointerId = null;
+      dragMode = null;
+      dragMarker = null;
+      try { ev.target.releasePointerCapture && ev.target.releasePointerCapture(ev.pointerId); } catch (e) {}
+      tooltip.style.opacity = 0;
+      resetTooltipStyle();
+      restoreBase();
+    }
+  }
+
+  // attach pointer listeners to the scroll container
+  scroll.addEventListener("pointerdown", onPointerDown, { passive: false });
+  scroll.addEventListener("pointermove", onPointerMove, { passive: false });
+  scroll.addEventListener("pointerup", endPointer, { passive: true });
+  scroll.addEventListener("pointercancel", endPointer, { passive: true });
+  scroll.addEventListener("pointerleave", (ev) => {
+    if (!isDragging) {
+      tooltip.style.opacity = 0;
+      resetTooltipStyle();
+      restoreBase();
+    }
+  }, { passive: true });
+
+  // fallback: if you previously added touch listeners, remove them to avoid conflicts
+  // (If you added them elsewhere, ensure they are removed or not duplicated.)
 }
 
 // DAILY FORECAST
