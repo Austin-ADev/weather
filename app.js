@@ -524,6 +524,7 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   const dense = canvas._densePoints;
   const hourWidth = canvas._hourWidth;
   const DPR = canvas._DPR || 1;
+  const markers = canvas._markers || [];
 
   function restoreBase() {
     if (!canvas._baseImage) return;
@@ -542,7 +543,38 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     if (worldX < 0) worldX = 0;
     if (worldX >= dense.length) worldX = dense.length - 1;
 
-    // pick nearest dense point BEFORE auto-scroll to test visibility
+    // 1) Check marker hover first (higher priority)
+    const markerThreshold = 12; // px distance to trigger marker hover
+    for (let m of markers) {
+      const dx = Math.abs(worldX - m.x);
+      const mouseY = e.clientY - rect.top;
+      const dy = Math.abs(mouseY - m.y);
+      if (dx <= markerThreshold && dy <= markerThreshold) {
+        // Marker hovered — show tooltip with marker color and draw colored dot
+        // Auto-scroll only when marker dot is visible (keeps behavior consistent)
+        const visibleX = m.x - scroll.scrollLeft;
+        const margin = 60;
+        const viewportW = rect.width;
+        if (visibleX < margin) scroll.scrollLeft = Math.max(0, m.x - margin);
+        else if (visibleX > viewportW - margin) scroll.scrollLeft = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
+
+        const visibleX2 = m.x - scroll.scrollLeft;
+        tooltip.innerHTML = `<strong>${m.type.toUpperCase()}</strong><br>${Math.round(m.temp)}${symbol}`;
+        tooltip.style.opacity = 1;
+        tooltip.style.left = (visibleX2) + "px";
+        tooltip.style.top = (m.y - 20) + "px";
+
+        restoreBase();
+        ctx.fillStyle = m.color;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        return;
+      }
+    }
+
+    // 2) If no marker hovered, proceed with line hover logic
     const idx = Math.round(worldX);
     const p = dense[idx];
     if (!p || p.y === null) {
@@ -553,30 +585,20 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
 
     const mouseY = e.clientY - rect.top;
     const visibleThreshold = 25;
-
-    // If cursor is NOT close enough to the line, do NOT auto-scroll and hide dot
     if (Math.abs(mouseY - p.y) > visibleThreshold) {
       tooltip.style.opacity = 0;
       restoreBase();
       return;
     }
 
-    // At this point the dot should be visible — perform auto-scroll if needed
-    const margin = 60; // px margin inside viewport
+    // Dot is visible — auto-scroll to keep it in view
+    const margin = 60;
     const visibleX = p.x - scroll.scrollLeft;
     const viewportW = rect.width;
+    if (visibleX < margin) scroll.scrollLeft = Math.max(0, p.x - margin);
+    else if (visibleX > viewportW - margin) scroll.scrollLeft = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
 
-    // If dot is too close to left or right edge, nudge scroll so it stays visible
-    if (visibleX < margin) {
-      scroll.scrollLeft = Math.max(0, p.x - margin);
-    } else if (visibleX > viewportW - margin) {
-      scroll.scrollLeft = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
-    }
-
-    // Recompute visibleX after any scroll change
     const visibleX2 = p.x - scroll.scrollLeft;
-
-    // Determine hour index for tooltip (nearest hour center)
     const hourIndex = Math.max(0, Math.min(temps.length - 1, Math.floor(p.x / hourWidth + 0.5)));
 
     tooltip.innerHTML = `
@@ -588,7 +610,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     tooltip.style.left = (visibleX2) + "px";
     tooltip.style.top = (p.y - 20) + "px";
 
-    // Draw dot by restoring base and painting circle
     restoreBase();
     ctx.fillStyle = "#fff";
     ctx.beginPath();
