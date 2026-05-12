@@ -6,18 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="icon" type="image/png" sizes="512x512" href="favicon.png"/>   
+
   <style>
-  /* Hides the entire UI instantly */
-  .hidden-ui {
-    display: none !important;
-  }
-</style>
+    .hidden-ui {
+      display: none !important;
+    }
+  </style>
 </head>
 
 <body>
   <canvas id="sky"></canvas>
 
-  <!-- WRAP ALL UI IN ONE CONTAINER -->
+  <!-- ALL UI -->
   <div id="ui" class="app-container">
 
     <!-- TOP BAR -->
@@ -47,34 +47,45 @@
     <!-- MAIN CONTENT -->
     <div class="content-area">
       <div class="weather-card">
+
+        <!-- HEADER -->
         <div class="header-block">
           <div id="cityName" class="city-name">—</div>
           <div id="localtime" class="local-time">—</div>
         </div>
 
+        <!-- CURRENT -->
         <div class="current-main">
           <div id="temp" class="temp">--°F</div>
           <div id="condition" class="condition">—</div>
         </div>
 
+        <!-- DETAILS -->
         <div class="details">
           <div>Humidity: <span id="humidity">--%</span></div>
           <div>Wind: <span id="wind">-- mph</span></div>
           <div>Feels Like: <span id="feels">--°F</span></div>
         </div>
 
+        <!-- HOURLY FORECAST -->
         <div class="forecast-panel">
           <div class="panel-title">Next 24 Hours</div>
-          <canvas id="hourlyChart"></canvas>
-          <div id="forecast"></div>
+
+          <!-- SCROLL CONTAINER (chart + hours scroll together) -->
+          <div id="hourlyScroll">
+            <canvas id="hourlyChart"></canvas>
+            <div id="forecast"></div>
+          </div>
         </div>
 
+        <!-- DAILY FORECAST -->
         <div class="forecast-panel forecast-panel-daily">
           <div class="panel-title">Next 7 Days</div>
           <div id="dailyForecast"></div>
         </div>
       </div>
 
+      <!-- RADAR -->
       <iframe
         id="radarFrame"
         class="radar-frame"
@@ -85,34 +96,30 @@
     </div>
   </div>
 
+  <!-- UI TOGGLE -->
   <script>
-  // Toggle UI visibility
-  function toggleUI() {
-    document.getElementById("ui").classList.toggle("hidden-ui");
-  }
-
-  // Press H to hide/show UI
-  window.addEventListener("keydown", e => {
-    if (e.key.toLowerCase() === "h") {
-      toggleUI();
+    function toggleUI() {
+      document.getElementById("ui").classList.toggle("hidden-ui");
     }
-  });
 
-  // Horizontal scroll for hourly forecast using mouse wheel
-  window.addEventListener("DOMContentLoaded", () => {
-    const hourly = document.getElementById("forecast");
+    window.addEventListener("keydown", e => {
+      if (e.key.toLowerCase() === "h") toggleUI();
+    });
 
-    if (hourly) {
-      hourly.addEventListener("wheel", (e) => {
-        if (e.deltaY !== 0) {
-          e.preventDefault();
-          hourly.scrollLeft += e.deltaY * 0.7; // Adjust scroll speed as needed
-        }
-      }, { passive: false });
-    }
-  });
-</script>
+    // Horizontal scroll for hourly forecast using mouse wheel
+    window.addEventListener("DOMContentLoaded", () => {
+      const hourlyScroll = document.getElementById("hourlyScroll");
 
+      if (hourlyScroll) {
+        hourlyScroll.addEventListener("wheel", (e) => {
+          if (e.deltaY !== 0) {
+            e.preventDefault();
+            hourlyScroll.scrollLeft += e.deltaY * 0.7;
+          }
+        }, { passive: false });
+      }
+    });
+  </script>
 
   <script src="app.js"></script>
 </body>
