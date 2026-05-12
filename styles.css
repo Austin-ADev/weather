@@ -1,22 +1,18 @@
 /* =========================================================
    RESET + ROOT
    ========================================================= */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-:root {
-  --card-bg: rgba(8, 12, 24, 0.72);
-  --card-border: rgba(255, 255, 255, 0.12);
-  --chip-bg: rgba(255, 255, 255, 0.12);
-  --chip-bg-active: rgba(255, 255, 255, 0.24);
+:root{
+  --card-bg: rgba(8,12,24,0.72);
+  --card-border: rgba(255,255,255,0.12);
+  --chip-bg: rgba(255,255,255,0.12);
+  --chip-bg-active: rgba(255,255,255,0.24);
   --accent: #4fd1ff;
-  --accent-soft: rgba(79, 209, 255, 0.25);
-  --text-soft: rgba(255, 255, 255, 0.75);
-  --text-muted: rgba(255, 255, 255, 0.6);
-  --shadow-soft: 0 24px 60px rgba(0, 0, 0, 0.65);
+  --accent-soft: rgba(79,209,255,0.25);
+  --text-soft: rgba(255,255,255,0.75);
+  --text-muted: rgba(255,255,255,0.6);
+  --shadow-soft: 0 24px 60px rgba(0,0,0,0.65);
   --radius-card: 26px;
   --radius-pill: 999px;
   --transition-fast: 150ms ease-out;
@@ -24,548 +20,235 @@
 }
 
 /* =========================================================
-   BODY + SHADER BACKGROUND
+   PAGE + BACKGROUND
    ========================================================= */
-html, body {
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+html,body { height:100%; overflow-x:hidden; }
+body{
+  font-family: system-ui, -apple-system, "SF Pro Text", BlinkMacSystemFont, sans-serif;
+  color: #fff;
+  background: linear-gradient(to bottom,#1a2b4c 0%,#2f4f7a 30%,#5fa8dd 70%,#b8eaff 100%);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  min-height:100vh;
 }
 
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-  color: white;
-  background: linear-gradient(
-  to bottom,
-  #1a2b4c 0%,    /* soft twilight */
-  #2f4f7a 30%,   /* pastel blue */
-  #5fa8dd 70%,   /* airy mid sky */
-  #b8eaff 100%   /* pastel horizon */
-);
-  min-height: auto;
-}
-
-#sky {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: -2;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background: none;
-  pointer-events: none;
-  z-index: -1;
+/* shader canvas */
+#sky{
+  position:fixed; inset:0; width:100vw; height:100vh; z-index:-2;
 }
 
 /* =========================================================
-   GLOBAL ACCENT SCROLLBARS
+   SCROLLBAR STYLING
    ========================================================= */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent) transparent;
-}
+* { scrollbar-width: thin; scrollbar-color: var(--accent) transparent; }
 
-*::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  background: var(--accent);
-  border-radius: 999px;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: rgba(79, 209, 255, 0.7);
-}
+*::-webkit-scrollbar { width:6px; height:6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--accent); border-radius:999px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(79,209,255,0.7); }
 
 /* =========================================================
-   APP WRAPPER
+   APP LAYOUT
    ========================================================= */
-.app-container {
-  max-width: 780px;
-  margin: 2.5rem auto 3rem;
-  padding: 0 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-height: auto; /* <-- ensures scrollbars appear */
+.app-container{
+  max-width:780px;
+  margin:2.5rem auto 3rem;
+  padding:0 1.25rem;
+  display:flex;
+  flex-direction:column;
+  gap:0.75rem;
 }
 
-/* =========================================================
-   TOP BAR
-   ========================================================= */
-.top-bar {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-}
+/* TOP BAR */
+.top-bar{ display:flex; gap:0.75rem; align-items:center; }
 
-/* =========================================================
-   SEARCH BAR
-   ========================================================= */
-.search-wrapper {
-  position: relative;
-  flex: 1;
+/* SEARCH */
+.search-wrapper{ position:relative; flex:1; }
+.search-wrapper input{
+  width:100%;
+  padding:0.8rem 1.1rem 0.8rem 2.6rem;
+  border-radius:var(--radius-pill);
+  border:1px solid rgba(255,255,255,0.18);
+  font-size:0.95rem;
+  background: rgba(10,16,32,0.7);
+  color:#fff;
+  outline:none;
+  transition: border-color var(--transition-med), box-shadow var(--transition-med), background var(--transition-med), transform var(--transition-fast);
 }
-
-.search-wrapper input {
-  width: 100%;
-  padding: 0.8rem 1.1rem 0.8rem 2.6rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  font-size: 0.95rem;
-  background: rgba(10, 16, 32, 0.7);
-  color: white;
-  outline: none;
-  transition: border-color var(--transition-med), box-shadow var(--transition-med),
-              background var(--transition-med), transform var(--transition-fast);
-}
-
-.search-wrapper input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.search-wrapper input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-soft);
-  background: rgba(10, 16, 32, 0.9);
+.search-wrapper input::placeholder{ color: rgba(255,255,255,0.45); }
+.search-wrapper input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px var(--accent-soft);
+  background: rgba(10,16,32,0.9);
   transform: translateY(-1px);
 }
-
-.search-icon {
-  position: absolute;
-  left: 0.9rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 1.1rem;
-  height: 1.1rem;
-  opacity: 0.85;
-  color: rgba(255, 255, 255, 0.8);
+.search-icon{ position:absolute; left:0.9rem; top:50%; transform:translateY(-50%); width:1.1rem; height:1.1rem; color:rgba(255,255,255,0.8); opacity:0.85; }
+.search-results{
+  position:absolute; top:110%; left:0; right:0;
+  background: rgba(8,12,24,0.96);
+  border-radius:16px; padding:0.35rem 0; display:none; z-index:20;
+  border:1px solid rgba(255,255,255,0.12);
+  box-shadow:0 18px 40px rgba(0,0,0,0.7);
+  max-height:260px; overflow-y:auto;
 }
-
-.search-icon svg {
-  width: 100%;
-  height: 100%;
+.search-item{
+  padding:0.55rem 0.9rem; cursor:pointer; font-size:0.9rem; color:var(--text-soft);
+  display:flex; justify-content:space-between; align-items:center; gap:0.4rem;
+  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
+.search-item:hover{ background: rgba(255,255,255,0.06); color:#fff; transform: translateX(1px); }
+.search-star{ cursor:pointer; opacity:0.7; transition: opacity 0.2s; }
+.search-star:hover{ opacity:1; }
 
-/* SEARCH RESULTS + RECENT */
-.search-results {
-  position: absolute;
-  top: 110%;
-  left: 0;
-  right: 0;
-  background: rgba(8, 12, 24, 0.96);
-  border-radius: 16px;
-  padding: 0.35rem 0;
-  display: none;
-  z-index: 20;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
-  max-height: 260px;
-  overflow-y: auto;
+/* UNIT BUTTON */
+.unit-btn{
+  padding:0.6rem 1rem; border-radius:var(--radius-pill);
+  border:1px solid rgba(255,255,255,0.2);
+  background: radial-gradient(circle at top left, rgba(79,209,255,0.35), rgba(10,16,32,0.9));
+  color:#fff; cursor:pointer; font-size:0.85rem; text-transform:uppercase; font-weight:600;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
 }
+.unit-btn:hover{ transform: translateY(-1px); border-color:var(--accent); }
 
-.search-item {
-  padding: 0.55rem 0.9rem;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: var(--text-soft);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.4rem;
-  transition: background var(--transition-fast), color var(--transition-fast),
-              transform var(--transition-fast);
+/* FAVORITES */
+.favorites-bar{ display:flex; justify-content:space-between; align-items:center; gap:0.75rem; }
+.favorites-list{ display:flex; gap:0.4rem; flex-wrap:wrap; }
+.fav-chip{
+  padding:0.25rem 0.7rem; border-radius:var(--radius-pill); background:var(--chip-bg);
+  font-size:0.8rem; cursor:pointer; color:var(--text-soft); border:1px solid rgba(255,255,255,0.12);
+  transition: background var(--transition-fast), transform var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
-
-.search-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: white;
-  transform: translateX(1px);
+.fav-chip:hover{ background:var(--chip-bg-active); transform: translateY(-1px); color:#fff; }
+.fav-chip.active{ background:var(--accent-soft); border-color:var(--accent); color:#fff; }
+.fav-btn{
+  padding:0.35rem 0.8rem; border-radius:var(--radius-pill); border:1px solid rgba(255,255,255,0.2);
+  background: rgba(10,16,32,0.9); cursor:pointer; font-size:1.1rem; color:var(--text-soft);
+  display:inline-flex; align-items:center; justify-content:center;
 }
-
-.search-star {
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s;
-}
-
-.search-star:hover {
-  opacity: 1;
-}
+.fav-btn:hover{ transform: translateY(-1px); }
+.fav-btn.active{ background:#ffd54a; border-color:#ffe082; color:#1f2933; }
 
 /* =========================================================
-   UNIT BUTTON
+   MAIN CONTENT + WEATHER CARD
    ========================================================= */
-.unit-btn {
-  padding: 0.6rem 1rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: radial-gradient(circle at top left, rgba(79, 209, 255, 0.35), rgba(10, 16, 32, 0.9));
-  color: white;
-  cursor: pointer;
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-weight: 600;
-  transition: transform var(--transition-fast), border-color var(--transition-fast),
-              background var(--transition-fast);
+.content-area{
+  margin-top:0.5rem;
+  display:grid;
+  grid-template-columns: minmax(0,1.2fr) minmax(0,1fr);
+  gap:1rem;
 }
+.weather-card{
+  background:var(--card-bg); border-radius:var(--radius-card); border:1px solid var(--card-border);
+  box-shadow:var(--shadow-soft); padding:1.5rem 1.5rem 1.25rem; display:flex; flex-direction:column; gap:1rem;
+}
+.header-block{ display:flex; flex-direction:column; gap:0.25rem; }
+.city-name{ font-size:1.9rem; font-weight:700; letter-spacing:0.02em; }
+.local-time{ font-size:0.95rem; color:var(--text-muted); }
+.current-main{ display:flex; align-items:flex-end; gap:1.1rem; margin-top:0.8rem; }
+.temp{ font-size:3.4rem; font-weight:700; letter-spacing:0.03em; }
+.condition{ font-size:1rem; color:var(--text-soft); padding-bottom:0.3rem; }
 
-.unit-btn:hover {
-  transform: translateY(-1px);
-  border-color: var(--accent);
+/* DETAILS */
+.details{
+  margin-top:0.8rem; display:grid; grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:0.6rem 1.5rem; font-size:0.9rem; color:var(--text-soft);
 }
+.details div span{ color:#fff; font-weight:500; }
+
+/* FORECAST PANELS */
+.forecast-panel{
+  margin-top:0.75rem; border-radius:16px; background: rgba(6,10,22,0.9);
+  border:1px solid rgba(255,255,255,0.12); padding:0.6rem 0.75rem; position:relative;
+}
+.panel-title{ font-size:0.8rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:0.4rem; }
 
 /* =========================================================
-   FAVORITES BAR
+   HOURLY FORECAST (chart + scroll)
+   =========================================================
+   Key rules:
+   - #hourlyScroll is the positioned container for tooltip (position:relative).
+   - #hourlyInner is inline-block and contains the canvas and forecast rows.
+   - The canvas is sized by JS (drawHourlyChart). CSS should not force a conflicting width/height.
    ========================================================= */
-.favorites-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
+#hourlyScroll{
+  position:relative;
+  overflow-x:auto;
+  overflow-y:hidden;
+  white-space:nowrap;
+  scroll-behavior:auto; /* JS controls easing */
+  -webkit-overflow-scrolling:auto;
 }
 
-.favorites-list {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
+/* inner wrapper */
+#hourlyInner{ display:inline-block; position:relative; }
+
+/* canvas: allow JS to set exact CSS width/height; provide sensible defaults */
+#hourlyChart{
+  display:block;
+  height:120px; /* visual fallback; drawHourlyChart will override style.width/style.height */
+  max-width:none;
+  touch-action:pan-x;
+  -webkit-user-select:none;
+  user-select:none;
+  margin-bottom:10px;
 }
 
-.fav-chip {
-  padding: 0.25rem 0.7rem;
-  border-radius: var(--radius-pill);
-  background: var(--chip-bg);
-  font-size: 0.8rem;
-  cursor: pointer;
-  color: var(--text-soft);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  transition: background var(--transition-fast), transform var(--transition-fast),
-              border-color var(--transition-fast), color var(--transition-fast);
+/* forecast rows (fallback list) */
+#forecast{ display:flex; gap:0.6rem; overflow-x:auto; padding-bottom:0.4rem; white-space:nowrap; }
+.forecast-hour{
+  min-width:80px; padding:0.4rem 0.45rem; border-radius:12px; background: rgba(15,23,42,0.9);
+  border:1px solid rgba(255,255,255,0.12); font-size:0.8rem; display:flex; flex-direction:column; gap:0.25rem; color:var(--text-soft);
 }
 
-.fav-chip:hover {
-  background: var(--chip-bg-active);
-  transform: translateY(-1px);
-  color: white;
-}
-
-.fav-chip.active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: white;
-}
-
-.fav-btn {
-  padding: 0.35rem 0.8rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(10, 16, 32, 0.9);
-  cursor: pointer;
-  font-size: 1.1rem;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-soft);
-  transition: transform var(--transition-fast), background var(--transition-fast),
-              border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.fav-btn:hover {
-  transform: translateY(-1px);
-}
-
-.fav-btn.active {
-  background: #ffd54a;
-  border-color: #ffe082;
-  color: #1f2933;
-}
-
-/* =========================================================
-   MAIN CONTENT
-   ========================================================= */
-.content-area {
-  margin-top: 0.5rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 1rem;
-}
-
-/* =========================================================
-   WEATHER CARD
-   ========================================================= */
-.weather-card {
-  background: var(--card-bg);
-  border-radius: var(--radius-card);
-  border: 1px solid var(--card-border);
-  box-shadow: var(--shadow-soft);
-  padding: 1.5rem 1.5rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.header-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.city-name {
-  font-size: 1.9rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.local-time {
-  font-size: 0.95rem;
-  color: var(--text-muted);
-}
-
-.current-main {
-  display: flex;
-  align-items: flex-end;
-  gap: 1.1rem;
-  margin-top: 0.8rem;
-}
-
-.temp {
-  font-size: 3.4rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-
-.condition {
-  font-size: 1rem;
-  color: var(--text-soft);
-  padding-bottom: 0.3rem;
-}
-
-/* =========================================================
-   DETAILS GRID
-   ========================================================= */
-.details {
-  margin-top: 0.8rem;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem 1.5rem;
-  font-size: 0.9rem;
-  color: var(--text-soft);
-}
-
-.details div span {
-  color: white;
-  font-weight: 500;
-}
-
-/* =========================================================
-   FORECAST PANELS
-   ========================================================= */
-.forecast-panel {
-  margin-top: 0.75rem;
-  border-radius: 16px;
-  background: rgba(6, 10, 22, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 0.6rem 0.75rem;
-}
-
-.panel-title {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin-bottom: 0.4rem;
-}
-
-/* =========================================================
-   HOURLY FORECAST (HORIZONTAL SCROLL)
-   ========================================================= */
-#forecast {
-  display: flex;
-  gap: 0.6rem;
-  overflow-x: auto;
-  padding-bottom: 0.4rem;
-  scroll-behavior: auto;
-}
-
-#forecast:hover {
-  overscroll-behavior: contain;
-}
-
-#forecast::-webkit-scrollbar {
-  height: 6px;
-}
-
-#forecast::-webkit-scrollbar-thumb {
-  background: var(--accent);
-  border-radius: 999px;
-}
-
-.forecast-hour {
-  min-width: 80px;
-  padding: 0.4rem 0.45rem;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: 0.8rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  color: var(--text-soft);
-}
-
-/* =========================================================
-   DAILY FORECAST (VERTICAL SCROLL)
-   ========================================================= */
-.forecast-panel-daily {
-  max-height: 220px;
-  display: flex;
-  flex-direction: column;
-}
-
-#dailyForecast {
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-#dailyForecast::-webkit-scrollbar-thumb {
-  background: var(--accent);
-}
-
-.daily-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 0.6fr);
-  align-items: center;
-  padding: 0.45rem 0.2rem;
-  font-size: 0.85rem;
-  color: var(--text-soft);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.daily-row:last-child {
-  border-bottom: none;
-}
-
-.daily-row > div:nth-child(2) {
-  text-align: right;
-  font-weight: 500;
-  color: white;
-}
-
-.daily-row > div:nth-child(3) {
-  text-align: right;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-/* =========================================================
-   RADAR
-   ========================================================= */
-.radar-frame {
-  width: 100%;
-  min-height: 320px;
-  border: none;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
-}
-
-/* =========================================================
-   MOBILE
-   ========================================================= */
-@media (max-width: 820px) {
-  .app-container {
-    max-width: 100%;
-    margin: 1.5rem auto 2.5rem;
-    padding: 0 1rem;
-  }
-
-  .content-area {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .radar-frame {
-    min-height: 260px;
-  }
-}
-#hourlyChart {
-  width: 100%;
-  height: 120px;
-  display: block;
-  margin-bottom: 10px;
-}
-
-.forecast-panel {
-  position: relative;
-}
-
-#forecast {
-  overflow-x: auto;
-  white-space: nowrap;
-}
-#hourlyScroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
-  position: relative;
-}
-
-#hourlyInner {
-  display: inline-block;
-  position: relative;
-}
-
-#hourlyChart {
-  touch-action: pan-x; /* allow horizontal scroll gestures to pass through */
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-#forecast {
-  display: inline-flex;
-}
-.hourly-tooltip {
-  position: absolute;
-  pointer-events: none;
+/* tooltip (positioned relative to #hourlyScroll) */
+.hourly-tooltip{
+  position:absolute;
+  pointer-events:none;
   background: rgba(0,0,0,0.65);
-  color: white;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 13px;
+  color:#fff;
+  padding:6px 10px;
+  border-radius:6px;
+  font-size:13px;
   backdrop-filter: blur(4px);
-  white-space: nowrap;
-  opacity: 0;
+  white-space:nowrap;
+  opacity:0;
   transition: opacity 120ms ease, transform 120ms ease;
-  transform: translateX(-50%); /* center horizontally only */
-  z-index: 20;
-  will-change: transform, opacity, left, top;
+  transform: translateX(-50%); /* center by default */
+  z-index:20;
+  will-change: left, top, transform, opacity;
+  box-sizing:border-box;
   max-width: calc(100% - 12px);
-  box-sizing: border-box;
-}
-.hourly-tooltip.measuring {
-  opacity: 1 !important;
-  pointer-events: none;
-  visibility: hidden; /* visible for layout but not shown to user */
 }
 
-.hourly-cursor {
-  display: none !important;
+/* measuring helper (if used) */
+.hourly-tooltip.measuring{ opacity:1 !important; pointer-events:none; visibility:hidden; }
+
+/* hide cursor helper */
+.hourly-cursor{ display:none !important; }
+
+/* =========================================================
+   DAILY FORECAST
+   ========================================================= */
+.forecast-panel-daily{ max-height:220px; display:flex; flex-direction:column; }
+#dailyForecast{ display:flex; flex-direction:column; overflow-y:auto; padding-right:4px; }
+.daily-row{
+  display:grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1.1fr) minmax(0,0.6fr);
+  align-items:center; padding:0.45rem 0.2rem; font-size:0.85rem; color:var(--text-soft);
+  border-bottom:1px solid rgba(255,255,255,0.08);
+}
+.daily-row:last-child{ border-bottom:none; }
+.daily-row > div:nth-child(2){ text-align:right; font-weight:500; color:#fff; }
+.daily-row > div:nth-child(3){ text-align:right; font-size:0.8rem; color:var(--text-muted); }
+
+/* RADAR */
+.radar-frame{ width:100%; min-height:320px; border:none; border-radius:20px; overflow:hidden; box-shadow:0 18px 40px rgba(0,0,0,0.7); }
+
+/* MOBILE */
+@media (max-width:820px){
+  .app-container{ max-width:100%; margin:1.5rem auto 2.5rem; padding:0 1rem; }
+  .content-area{ grid-template-columns: minmax(0,1fr); }
+  .radar-frame{ min-height:260px; }
 }
 
-#hourlyScroll { position: relative; overflow-x: auto; overflow-y: hidden; white-space: nowrap; scroll-behavior: auto; }
-#hourlyChart { touch-action: pan-x; -webkit-user-select: none; user-select: none; }
-.hourly-tooltip { position: absolute; pointer-events: none; transform: translateX(-50%); transition: opacity 120ms ease; z-index: 20; }
+/* small accessibility/interaction helpers */
+.search-results[aria-hidden="true"], #recentSearches[aria-hidden="true"]{ display:none !important; }

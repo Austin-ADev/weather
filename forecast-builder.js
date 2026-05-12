@@ -1,10 +1,13 @@
-// FORECAST BUILDERS (module)
+// forecast-builder.js
+// Final, robust forecast builder module
+// Exports: buildHourly, drawHourlyChart, createBaseBitmapSnapshot, setupHourlyHover, setupHourlyTap, buildDaily
 
 import { getUnitParams } from './utils.js';
 import { WEATHER_TEXT } from './constants.js';
 
+// -----------------------------
 // buildHourly
-
+// -----------------------------
 export async function buildHourly(hourly, timezone) {
   const forecastEl = document.getElementById("forecast");
   if (!forecastEl) return;
@@ -12,6 +15,7 @@ export async function buildHourly(hourly, timezone) {
   const units = getUnitParams();
   if (!hourly || !hourly.time) return;
 
+  // align to current hour in timezone
   const now = new Date().toLocaleString("en-US", { timeZone: timezone });
   const currentHour = new Date(now).getHours();
 
@@ -45,43 +49,39 @@ export async function buildHourly(hourly, timezone) {
     forecastEl.appendChild(row);
   }
 
-  // draw chart (ensures canvas._densePoints uses CSS pixels)
   await drawHourlyChart(temps, labels, units.tempSymbol, conditions);
-
-  // snapshot (optional but recommended)
   try { await createBaseBitmapSnapshot(); } catch (e) { /* non-fatal */ }
-
-  // attach handlers
   try { setupHourlyHover(temps, labels, conditions, units.tempSymbol); } catch (e) { console.warn(e); }
   try { setupHourlyTap(temps, labels, conditions, units.tempSymbol); } catch (e) { console.warn(e); }
 }
 
+// -----------------------------
 // drawHourlyChart
-
+// -----------------------------
 export async function drawHourlyChart(temps, labels, symbol, conditions) {
   const canvas = document.getElementById("hourlyChart");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
+  if (!ctx) return;
 
-  // CSS layout sizes (use clientWidth/clientHeight for sampling and scroll math)
-  const hourWidth = 80; // CSS px per hour
+  const hourWidth = 80; // CSS px per hour (must match sampling logic)
   const cssH = 120;
-  const cssW = hourWidth * temps.length; // CSS pixels width
+  const cssW = Math.round(hourWidth * temps.length); // integer CSS width
   const DPR = window.devicePixelRatio || 1;
 
-  // set CSS size and backing store size
+  // Set CSS size and backing store size (use integer CSS width)
   canvas.style.width = cssW + "px";
   canvas.style.height = cssH + "px";
   canvas.width = Math.round(cssW * DPR);
   canvas.height = Math.round(cssH * DPR);
 
-  // store CSS width for handlers
+  // store for handlers
   canvas._cssWidth = cssW;
   canvas._cssHeight = cssH;
   canvas._DPR = DPR;
   canvas._hourWidth = hourWidth;
 
-  // set transform for drawing in CSS pixels
+  // draw in CSS pixels
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
   const w = cssW, h = cssH, pad = 20;
@@ -117,7 +117,7 @@ export async function drawHourlyChart(temps, labels, symbol, conditions) {
   }
   ctx.stroke();
 
-  // compute center points and draw high/low markers
+  // compute center points and draw high/low markers (CSS px)
   const points = temps.map((t, i) => {
     const x = i * hourWidth + hourWidth / 2;
     const y = h - pad - ((t - min) / (max - min || 1)) * (h - pad * 2);
@@ -161,17 +161,18 @@ export async function drawHourlyChart(temps, labels, symbol, conditions) {
     });
   }
 
-  // store for handlers (dense length equals cssW)
+  // store for handlers
   canvas._densePoints = dense;
   canvas._markers = markers;
 
-  // cache ImageData fallback (device pixels) and create ImageBitmap snapshot
+  // cache ImageData fallback and create ImageBitmap snapshot
   try { canvas._baseImage = ctx.getImageData(0, 0, Math.round(cssW * DPR), Math.round(cssH * DPR)); } catch (e) { canvas._baseImage = null; }
   try { canvas._baseBitmap = await createImageBitmap(canvas); } catch (e) { canvas._baseBitmap = null; }
 }
 
+// -----------------------------
 // createBaseBitmapSnapshot
-
+// -----------------------------
 export async function createBaseBitmapSnapshot() {
   const canvas = document.getElementById("hourlyChart");
   if (!canvas) return;
@@ -184,8 +185,9 @@ export async function createBaseBitmapSnapshot() {
   }
 }
 
+// -----------------------------
 // setupHourlyHover
-
+// -----------------------------
 export function setupHourlyHover(temps, labels, conditions, symbol) {
   const canvas = document.getElementById("hourlyChart");
   const scroll = document.getElementById("hourlyScroll");
@@ -199,57 +201,38 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
   const hourWidth = canvas._hourWidth || 80;
   const cssW = canvas._cssWidth || canvas.clientWidth;
   const DPR = canvas._DPR || window.devicePixelRatio || 1;
+  const cssH = canvas._cssHeight || 120;
 
   // state
-  const hover = { active: false, screenX: 0, screenY: 0, lockedToMarker: false, lockedMarkerWorldX: null };
-  let pendingFrame = false;
+  const hover = { active: false, screenX: 0, screenY: 0 };
   let lastPointerX = null, lastPointerTime = 0;
 
-  // scroll animation / control (single RAF loop)
-  let scrollTarget = null, scrollRaf = null;
+  // unified animation state
+  let scrollTarget = null;
+  let dotWorldX = Math.max(0, Math.min(dense.length - 1, scroll.scrollLeft + (scroll.clientWidth / 2)));
+  let dotY = (function(){ const s = sampleYAtWorldX(dotWorldX); return s != null ? s : cssH/2; })();
+  let targetWorldX = dotWorldX;
+  let targetY = dotY;
+  let rafId = null;
+
+  // marker lock state
+  let markerLock = null; // { x, y, color, index }
+  const MARKER_HYSTERESIS = 22; // px screen hysteresis to keep lock
+
   let pauseAutoScroll = false, pauseTimer = null;
   const PAUSE_MS = 180;
-  const VELOCITY_THRESHOLD = 0.6; // px per ms
+  const VELOCITY_THRESHOLD = 0.6;
   let userScrolling = false, userScrollTimer = null;
   const USER_SCROLL_IDLE = 220;
 
-  // helpers
-  function cancelAutoScroll() {
-    scrollTarget = null;
-    if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
-  }
-
-  function startScrollLoopIfNeeded() {
-    if (!scrollTarget || scrollRaf) return;
-    function step() {
-      if (!scrollTarget) { scrollRaf = null; return; }
-      const cur = scroll.scrollLeft;
-      const d = scrollTarget - cur;
-      const f = 0.12;
-      if (Math.abs(d) < 0.5) { scroll.scrollLeft = scrollTarget; scrollTarget = null; scrollRaf = null; return; }
-      scroll.scrollLeft = cur + d * f;
-
-      // while scrolling, keep dot visually correct
-      if (hover.active) {
-        // if locked to marker, compute screenX from locked worldX
-        const screenX = hover.lockedToMarker ? (hover.lockedMarkerWorldX - scroll.scrollLeft) : hover.screenX;
-        const worldX = scroll.scrollLeft + screenX;
-        const y = sampleYAtWorldX(worldX);
-        if (y != null) {
-          const hourIndex = clampIndex(Math.floor(worldX / hourWidth + 0.5), temps.length);
-          updateTooltipAndDraw(screenX, y, hourIndex);
-        }
-      }
-      scrollRaf = requestAnimationFrame(step);
-    }
-    scrollRaf = requestAnimationFrame(step);
-  }
+  function cancelAutoScroll() { scrollTarget = null; }
+  function ensureRaf() { if (!rafId) rafId = requestAnimationFrame(unifiedStep); }
 
   function easeScrollTo(target) {
     if (pauseAutoScroll || userScrolling) return;
     const maxLeft = Math.max(0, cssW - scroll.clientWidth);
     scrollTarget = Math.max(0, Math.min(maxLeft, target));
-    startScrollLoopIfNeeded();
+    ensureRaf();
   }
 
   function restoreBase() {
@@ -277,7 +260,6 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     ctx.restore();
   }
 
-  // fractional sampler (linear interpolation)
   function sampleYAtWorldX(worldX) {
     const x = Math.max(0, Math.min(dense.length - 1, worldX));
     const i = Math.floor(x);
@@ -291,7 +273,6 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
 
   function clampIndex(i, len) { return Math.max(0, Math.min(len - 1, i)); }
 
-  // tooltip centering/clamping helper: returns left px and whether to use translateX(-50%)
   function computeTooltipLeftAndTransform(screenX) {
     const tipW = tooltip.getBoundingClientRect().width || 120;
     const half = tipW / 2;
@@ -301,17 +282,51 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     return { leftPx: Math.max(minCenter, Math.min(maxCenter, screenX)), useCenterTransform: false };
   }
 
-  function updateTooltipAndDraw(screenX, y, hourIndex) {
+  function updateTooltipAndDraw(screenX, y, hourIndex, color = "#fff") {
     const { leftPx, useCenterTransform } = computeTooltipLeftAndTransform(screenX);
     tooltip.innerHTML = `<strong>${labels[hourIndex]}</strong><div>${Math.round(temps[hourIndex])}${symbol}</div>`;
     tooltip.style.left = leftPx + "px";
     tooltip.style.top = (y - 20) + "px";
     tooltip.style.opacity = 1;
     tooltip.style.transform = useCenterTransform ? "translateX(-50%)" : "translateX(0)";
-    drawDotAtScreenX(screenX, y, "#fff");
+    drawDotAtScreenX(screenX, y, color);
   }
 
-  // pointer scheduling with velocity detection and rAF throttle
+  // unified RAF: animate scroll and dot (X and Y)
+  function unifiedStep() {
+    // scroll easing
+    if (scrollTarget !== null) {
+      const cur = scroll.scrollLeft;
+      const d = scrollTarget - cur;
+      const sf = 0.12;
+      if (Math.abs(d) < 0.5) { scroll.scrollLeft = scrollTarget; scrollTarget = null; }
+      else scroll.scrollLeft = cur + d * sf;
+    }
+
+    // dot soft-snap X and Y (unless markerLock engaged, in which case targets are marker coords)
+    const dx = targetWorldX - dotWorldX;
+    const dy = targetY - dotY;
+    const xf = 0.22, yf = 0.28;
+    if (Math.abs(dx) > 0.25) dotWorldX += dx * xf; else dotWorldX = targetWorldX;
+    if (Math.abs(dy) > 0.25) dotY += dy * yf; else dotY = targetY;
+
+    if (hover.active) {
+      const screenX = Math.max(0, Math.min(scroll.clientWidth, dotWorldX - scroll.scrollLeft));
+      const hourIndex = clampIndex(Math.floor(dotWorldX / hourWidth + 0.5), temps.length);
+
+      // color: marker color if locked, else white
+      const color = markerLock ? (markerLock.color || "#fff") : "#fff";
+      updateTooltipAndDraw(screenX, dotY, hourIndex, color);
+    }
+
+    if (scrollTarget !== null || Math.abs(targetWorldX - dotWorldX) > 0.25 || Math.abs(targetY - dotY) > 0.25) {
+      rafId = requestAnimationFrame(unifiedStep);
+    } else {
+      rafId = null;
+    }
+  }
+
+  // pointer scheduling (pointermove covers mouse/touch/pen)
   function schedulePointerUpdate(screenX, screenY) {
     const now = performance.now();
     let velocity = 0;
@@ -323,7 +338,7 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     lastPointerX = screenX;
     lastPointerTime = now;
 
-    // pause auto-scroll while moving fast; cancel any target
+    // pause auto-scroll while moving fast
     if (velocity > VELOCITY_THRESHOLD) {
       pauseAutoScroll = true;
       cancelAutoScroll();
@@ -334,95 +349,96 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
       pauseTimer = setTimeout(() => { pauseAutoScroll = false; }, PAUSE_MS);
     }
 
-    // if we were locked to a marker but pointer moved away, unlock
-    if (hover.lockedToMarker) {
-      // compute distance in screen px between pointer and locked marker screenX
-      const lockedScreenX = hover.lockedMarkerWorldX - scroll.scrollLeft;
-      if (Math.abs(screenX - lockedScreenX) > 18) { // small hysteresis
-        hover.lockedToMarker = false;
-        hover.lockedMarkerWorldX = null;
-      }
-    }
-
-    // if not locked, update hover.screenX; if locked, keep screenX derived from locked worldX
-    hover.screenX = hover.lockedToMarker ? Math.max(0, Math.min(scroll.clientWidth, hover.lockedMarkerWorldX - scroll.scrollLeft)) : Math.max(0, Math.min(scroll.clientWidth, screenX));
+    hover.screenX = Math.max(0, Math.min(scroll.clientWidth, screenX));
     hover.screenY = screenY;
     hover.active = true;
 
-    if (pendingFrame) return;
-    pendingFrame = true;
-    requestAnimationFrame(() => {
-      pendingFrame = false;
-      // worldX should reflect locked marker worldX if locked, else scrollLeft + screenX
-      const worldX = hover.lockedToMarker ? hover.lockedMarkerWorldX : Math.max(0, Math.min(dense.length - 1, scroll.scrollLeft + hover.screenX));
+    // world coordinate under pointer
+    const worldFromPointer = scroll.scrollLeft + hover.screenX;
 
-      // marker priority (snap visually if pointer is inside marker hit area)
-      for (const m of markers) {
-        const dx = Math.abs(worldX - m.x);
-        const dy = Math.abs(hover.screenY - m.y);
-        const radial = Math.hypot(dx, dy) <= (m.hitRadius || 0);
-        const hw = (m.hitBox && m.hitBox.w) ? m.hitBox.w/2 : 0;
-        const rectHit = dx <= hw && dy <= (m.hitBox && m.hitBox.h ? m.hitBox.h/2 : 0);
-        if (radial || rectHit) {
-          // lock to this marker so the dot stays exactly on it
-          hover.lockedToMarker = true;
-          hover.lockedMarkerWorldX = m.x;
-          const markerScreenX = Math.max(0, Math.min(scroll.clientWidth, m.x - scroll.scrollLeft));
-          const { leftPx, useCenterTransform } = computeTooltipLeftAndTransform(markerScreenX);
-          tooltip.innerHTML = `<strong>${m.type.toUpperCase()}</strong><div>${Math.round(m.temp)}${symbol}</div>`;
-          tooltip.style.left = leftPx + "px";
-          tooltip.style.top = (m.y - 20) + "px";
-          tooltip.style.opacity = 1;
-          tooltip.style.transform = useCenterTransform ? "translateX(-50%)" : "translateX(0)";
+    // marker detection in SCREEN space (so scroll doesn't change hit detection)
+    let foundMarker = null;
+    for (const m of markers) {
+      const markerScreenX = m.x - scroll.scrollLeft;
+      const dxScreen = Math.abs(hover.screenX - markerScreenX);
+      const dyScreen = Math.abs(hover.screenY - m.y);
+      const radial = Math.hypot(dxScreen, dyScreen) <= (m.hitRadius || 0);
+      const hw = (m.hitBox && m.hitBox.w) ? m.hitBox.w / 2 : 0;
+      const rectHit = dxScreen <= hw && dyScreen <= (m.hitBox && m.hitBox.h ? m.hitBox.h / 2 : 0);
+      if (radial || rectHit) { foundMarker = m; break; }
+    }
 
-          // nudge scroll if marker near edges
-          const visibleX = markerScreenX, margin = 60, vw = scroll.clientWidth;
-          if (!pauseAutoScroll && !userScrolling) {
-            if (visibleX < margin) easeScrollTo(Math.max(0, m.x - margin));
-            else if (visibleX > vw - margin) easeScrollTo(Math.min(cssW - vw, m.x - (vw - margin)));
-          }
+    if (foundMarker) {
+      // engage marker lock immediately: set targets to exact marker coords and snap dot to them
+      markerLock = { x: foundMarker.x, y: foundMarker.y, color: foundMarker.color, index: foundMarker.index };
+      targetWorldX = foundMarker.x;
+      targetY = foundMarker.y;
+      // snap immediately to avoid any sampling mismatch
+      dotWorldX = targetWorldX;
+      dotY = targetY;
 
-          drawDotAtScreenX(markerScreenX, m.y, m.color || "#fff");
-          return;
-        }
+      // nudge scroll if marker near edges
+      const markerScreenX = Math.max(0, Math.min(scroll.clientWidth, foundMarker.x - scroll.scrollLeft));
+      const margin = 60, vw = scroll.clientWidth;
+      if (!pauseAutoScroll && !userScrolling) {
+        if (markerScreenX < margin) easeScrollTo(Math.max(0, foundMarker.x - margin));
+        else if (markerScreenX > vw - margin) easeScrollTo(Math.min(cssW - vw, foundMarker.x - (vw - margin)));
       }
+    } else if (markerLock) {
+      // if locked, check hysteresis in screen space; keep lock while pointer remains near marker
+      const lockedScreenX = markerLock.x - scroll.scrollLeft;
+      const lockedScreenY = markerLock.y;
+      const dist = Math.hypot(hover.screenX - lockedScreenX, hover.screenY - lockedScreenY);
+      if (dist <= MARKER_HYSTERESIS) {
+        // keep lock: targets remain marker coords (no change)
+        targetWorldX = markerLock.x;
+        targetY = markerLock.y;
+        // ensure dot is exactly on marker (prevent drift)
+        dotWorldX = targetWorldX;
+        dotY = targetY;
+      } else {
+        // release lock and fall back to pointer sampling
+        markerLock = null;
+        targetWorldX = Math.max(0, Math.min(dense.length - 1, worldFromPointer));
+        const sampledY = sampleYAtWorldX(targetWorldX);
+        targetY = sampledY != null ? sampledY : targetY;
+      }
+    } else {
+      // normal pointer: pointer has priority
+      targetWorldX = Math.max(0, Math.min(dense.length - 1, worldFromPointer));
+      const sampledY = sampleYAtWorldX(targetWorldX);
+      targetY = sampledY != null ? sampledY : targetY;
 
-      // not on a marker: sample the line
-      const y = sampleYAtWorldX(worldX);
-      if (y == null) { tooltip.style.opacity = 0; restoreBase(); return; }
-      if (Math.abs(hover.screenY - y) > 60) { tooltip.style.opacity = 0; restoreBase(); return; }
-
-      const hourIndex = clampIndex(Math.floor(worldX / hourWidth + 0.5), temps.length);
-      updateTooltipAndDraw(hover.screenX, y, hourIndex);
-
-      // auto-scroll nudge if pointer near edges and not paused/user-scrolling
       const visibleX = hover.screenX, margin = 60, vw = scroll.clientWidth;
-      if (!pauseAutoScroll && !userScrolling && !hover.lockedToMarker) {
-        if (visibleX < margin) easeScrollTo(Math.max(0, worldX - margin));
-        else if (visibleX > vw - margin) easeScrollTo(Math.min(cssW - vw, worldX - (vw - margin)));
+      if (!pauseAutoScroll && !userScrolling) {
+        if (visibleX < margin) easeScrollTo(Math.max(0, targetWorldX - margin));
+        else if (visibleX > vw - margin) easeScrollTo(Math.min(cssW - vw, targetWorldX - (vw - margin)));
       }
-    });
+    }
+
+    ensureRaf();
   }
 
-  // mouse handlers
-  function onMouseMove(ev) {
+  // pointer handlers
+  function onPointerMove(ev) {
+    // only handle primary pointer
+    if (ev.isPrimary === false) return;
     const rect = canvas.getBoundingClientRect();
     const xInCanvas = ev.clientX - rect.left;
     const screenX = xInCanvas;
     const screenY = ev.clientY - rect.top;
     schedulePointerUpdate(screenX, screenY);
   }
-  function onMouseLeave() {
+
+  function onPointerLeave() {
     hover.active = false;
-    hover.lockedToMarker = false;
-    hover.lockedMarkerWorldX = null;
     tooltip.style.opacity = 0;
     restoreBase();
     clearTimeout(pauseTimer);
     pauseAutoScroll = false;
+    markerLock = null;
   }
 
-  // user scroll detection: cancel auto-scroll while user scrolls manually
   function onUserScroll() {
     userScrolling = true;
     cancelAutoScroll();
@@ -430,14 +446,15 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     userScrollTimer = setTimeout(() => { userScrolling = false; }, USER_SCROLL_IDLE);
   }
 
-  // attach handlers (avoid duplicates)
-  canvas.removeEventListener("mousemove", canvas._hourlyMouseMove);
-  canvas.removeEventListener("mouseleave", canvas._hourlyMouseLeave);
-  canvas._hourlyMouseMove = onMouseMove;
-  canvas._hourlyMouseLeave = onMouseLeave;
-  canvas.addEventListener("mousemove", onMouseMove, { passive: true });
-  canvas.addEventListener("mouseleave", onMouseLeave, { passive: true });
+  // attach pointer handlers (avoid duplicates)
+  canvas.removeEventListener("pointermove", canvas._hourlyPointerMove);
+  canvas.removeEventListener("pointerleave", canvas._hourlyPointerLeave);
+  canvas._hourlyPointerMove = onPointerMove;
+  canvas._hourlyPointerLeave = onPointerLeave;
+  canvas.addEventListener("pointermove", onPointerMove, { passive: true });
+  canvas.addEventListener("pointerleave", onPointerLeave, { passive: true });
 
+  // user scroll detection
   scroll.removeEventListener("wheel", scroll._hourlyWheel);
   scroll._hourlyWheel = onUserScroll;
   scroll.addEventListener("wheel", onUserScroll, { passive: true });
@@ -446,7 +463,6 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
   scroll._hourlyPointerDown = onUserScroll;
   scroll.addEventListener("pointerdown", scroll._hourlyPointerDown, { passive: true });
 
-  // cancel auto-scroll on native scroll/touchmove so JS never fights user gestures
   scroll.removeEventListener("scroll", scroll._hourlyScroll);
   scroll._hourlyScroll = () => {
     userScrolling = true;
@@ -464,10 +480,23 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     userScrollTimer = setTimeout(() => { userScrolling = false; }, USER_SCROLL_IDLE);
   };
   scroll.addEventListener("touchmove", scroll._hourlyTouchMove, { passive: true });
+
+  // helper used inside this scope
+  function sampleYAtWorldX(worldX) {
+    const x = Math.max(0, Math.min(dense.length - 1, worldX));
+    const i = Math.floor(x);
+    const t = x - i;
+    const a = dense[i];
+    const b = dense[i + 1] || a;
+    if (!a || a.y == null) return null;
+    if (!b || b.y == null) return a.y;
+    return a.y + (b.y - a.y) * t;
+  }
 }
 
+// -----------------------------
 // setupHourlyTap
-
+// -----------------------------
 export function setupHourlyTap(temps, labels, conditions, symbol) {
   const canvas = document.getElementById("hourlyChart");
   const scroll = document.getElementById("hourlyScroll");
@@ -481,6 +510,7 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
   const hourWidth = canvas._hourWidth || 80;
   const cssW = canvas._cssWidth || canvas.clientWidth;
   const DPR = canvas._DPR || window.devicePixelRatio || 1;
+  const cssH = canvas._cssHeight || 120;
 
   let pauseAutoScroll = false, pauseTimer = null;
   const PAUSE_MS = 180;
@@ -581,7 +611,7 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
   }
 
   function onPointerDown(ev) {
-    // handle touch/pen and mouse taps; allow mouse to still work if desired
+    if (ev.isPrimary === false) return;
     const rect = canvas.getBoundingClientRect();
     const xInCanvas = ev.clientX - rect.left;
     const screenX = Math.max(0, Math.min(scroll.clientWidth, xInCanvas));
@@ -590,24 +620,22 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
 
     pauseBriefly();
 
-    // marker priority: lock to marker if hit
+    // marker priority: detect in screen space
     for (const m of markers) {
-      const dx = Math.abs(worldX - m.x), dy = Math.abs(canvasY - m.y);
+      const markerScreenX = m.x - scroll.scrollLeft;
+      const dx = Math.abs(screenX - markerScreenX), dy = Math.abs(canvasY - m.y);
       if (Math.hypot(dx,dy) <= (m.hitRadius||0) || (dx <= (m.hitBox?.w||0)/2 && dy <= (m.hitBox?.h||0)/2)) {
-        const markerScreenX = Math.max(0, Math.min(scroll.clientWidth, m.x - scroll.scrollLeft));
-        // lock the visual dot to the marker world X while we nudge scroll
-        const lockedWorldX = m.x;
+        // snap exactly to marker and use its color
         tooltip.innerHTML = `<strong>${m.type.toUpperCase()}</strong><div>${Math.round(m.temp)}${symbol}</div>`;
         tooltip.style.left = clampTooltipLeft(markerScreenX) + "px";
         tooltip.style.top = (m.y - 20) + "px";
         tooltip.style.opacity = 1;
         drawDotAtScreenX(markerScreenX, m.y, m.color || "#fff");
 
-        // nudge scroll so marker is comfortably visible
         const visibleX = markerScreenX, margin = 60, vw = scroll.clientWidth;
         if (!pauseAutoScroll && !userScrolling) {
-          if (visibleX < margin) easeScrollTo(Math.max(0, lockedWorldX - margin), markerScreenX);
-          else if (visibleX > vw - margin) easeScrollTo(Math.min(cssW - vw, lockedWorldX - (vw - margin)), markerScreenX);
+          if (visibleX < margin) easeScrollTo(Math.max(0, m.x - margin), markerScreenX);
+          else if (visibleX > vw - margin) easeScrollTo(Math.min(cssW - vw, m.x - (vw - margin)), markerScreenX);
         }
         return;
       }
@@ -645,7 +673,6 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
   scroll._hourlyPointerDown = onUserScroll;
   scroll.addEventListener("pointerdown", scroll._hourlyPointerDown, { passive: true });
 
-  // cancel auto-scroll on native scroll/touchmove
   scroll.removeEventListener("scroll", scroll._hourlyScroll);
   scroll._hourlyScroll = () => {
     userScrolling = true;
@@ -665,10 +692,9 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
   scroll.addEventListener("touchmove", scroll._hourlyTouchMove, { passive: true });
 }
 
-/**
- * buildDaily
- * - Simple daily list builder (unchanged).
- */
+// -----------------------------
+// buildDaily
+// -----------------------------
 export function buildDaily(daily) {
   const dailyForecastEl = document.getElementById("dailyForecast");
   if (!dailyForecastEl) return;
