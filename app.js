@@ -388,19 +388,25 @@ function buildHourly(hourly, timezone) {
     forecastEl.appendChild(row);
   }
 
-  drawHourlyChart(temps, labels, units.tempSymbol);
+  drawHourlyChart(
+  temps,
+  labels,
+  units.tempSymbol,
+  hourly.weather_code.slice(startIndex, endIndex).map(code => WEATHER_TEXT[code] || "—")
+);
 }
 
-function drawHourlyChart(temps, labels, symbol) {
+function drawHourlyChart(temps, labels, symbol, conditions) {
   const canvas = document.getElementById("hourlyChart");
   const ctx = canvas.getContext("2d");
+  const tooltip = document.getElementById("hourlyTooltip");
+  const scroll = document.getElementById("hourlyScroll");
 
   const accent = getComputedStyle(document.documentElement)
     .getPropertyValue("--accent")
     .trim() || "#4fd1ff";
 
-  // MATCH HOURLY BOX WIDTH
-  const hourWidth = 80; // adjust to match your CSS
+  const hourWidth = 80; 
   const totalWidth = hourWidth * temps.length;
 
   canvas.width = totalWidth;
@@ -417,7 +423,23 @@ function drawHourlyChart(temps, labels, symbol) {
 
   ctx.clearRect(0, 0, w, h);
 
-  // LINE
+  // -----------------------------
+  // Hour segment bars
+  // -----------------------------
+  ctx.strokeStyle = "#ffffff22";
+  ctx.lineWidth = 1;
+
+  for (let i = 0; i < temps.length; i++) {
+    const x = i * hourWidth;
+    ctx.beginPath();
+    ctx.moveTo(x, pad);
+    ctx.lineTo(x, h - pad);
+    ctx.stroke();
+  }
+
+  // -----------------------------
+  // Temperature line
+  // -----------------------------
   ctx.beginPath();
   ctx.lineWidth = 3;
   ctx.strokeStyle = accent;
@@ -431,7 +453,9 @@ function drawHourlyChart(temps, labels, symbol) {
 
   ctx.stroke();
 
-  // HIGH POINT
+  // -----------------------------
+  // High marker
+  // -----------------------------
   const hiIndex = temps.indexOf(max);
   const hiX = hiIndex * step;
   const hiY = h - pad - ((max - min) / (max - min)) * (h - pad * 2);
@@ -441,10 +465,55 @@ function drawHourlyChart(temps, labels, symbol) {
   ctx.arc(hiX, hiY, 5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = accent;
-  ctx.font = "14px system-ui";
   ctx.fillText(`High: ${Math.round(max)}${symbol}`, hiX + 8, hiY - 8);
+
+  // -----------------------------
+  // Low marker
+  // -----------------------------
+  const loIndex = temps.indexOf(min);
+  const loX = loIndex * step;
+  const loY = h - pad - ((min - min) / (max - min)) * (h - pad * 2);
+
+  ctx.fillStyle = "#ffffffaa";
+  ctx.beginPath();
+  ctx.arc(loX, loY, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillText(`Low: ${Math.round(min)}${symbol}`, loX + 8, loY + 14);
+
+  // -----------------------------
+  // Hover interaction
+  // -----------------------------
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left + scroll.scrollLeft;
+
+    const index = Math.floor(x / hourWidth);
+    if (index < 0 || index >= temps.length) {
+      tooltip.style.opacity = 0;
+      return;
+    }
+
+    const t = temps[index];
+    const label = labels[index];
+    const cond = conditions[index];
+
+    tooltip.innerHTML = `
+      <strong>${label}</strong><br>
+      ${Math.round(t)}${symbol}<br>
+      ${cond}
+    `;
+
+    tooltip.style.left = (e.clientX - rect.left) + "px";
+    tooltip.style.top = (e.clientY - rect.top) + "px";
+    tooltip.style.opacity = 1;
+  };
+
+  canvas.onmouseleave = () => {
+    tooltip.style.opacity = 0;
+  };
 }
+
 
 function buildDaily(daily) {
   dailyForecastEl.innerHTML = "";
