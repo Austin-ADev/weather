@@ -404,14 +404,19 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     .getPropertyValue("--accent")
     .trim() || "#4fd1ff";
 
-  const hourWidth = 80; // must match your forecast-hour width
+  const hourWidth = 80;
   const totalWidth = hourWidth * temps.length;
 
-  canvas.width = totalWidth;
-  canvas.height = 120;
+  // Handle devicePixelRatio so canvas coordinate space matches CSS size
+  const DPR = window.devicePixelRatio || 1;
+  canvas.style.width = totalWidth + "px";
+  canvas.style.height = "120px";
+  canvas.width = Math.round(totalWidth * DPR);
+  canvas.height = Math.round(120 * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // scale drawing to CSS pixels
 
-  const w = canvas.width;
-  const h = canvas.height;
+  const w = totalWidth;
+  const h = 120;
 
   const max = Math.max(...temps);
   const min = Math.min(...temps);
@@ -421,15 +426,19 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.clearRect(0, 0, w, h);
 
   // =========================================================
-  // 1. Build a dense polyline (1px resolution)
+  // 1) Build dense polyline aligned to hour centers (1px per worldX)
+  //    worldX runs from 0..(totalWidth-1) and maps directly to box centers
   // =========================================================
-  const densePoints = [];
-
-  for (let x = 0; x < w; x++) {
-    const hourIndex = x / hourWidth;
+  const dense = new Array(w);
+  for (let worldX = 0; worldX < w; worldX++) {
+    // fractional hour index where center of first box is at hourWidth/2
+    const hourIndex = (worldX - hourWidth / 2) / hourWidth;
     const i = Math.floor(hourIndex);
 
-    if (i < 0 || i >= temps.length - 1) continue;
+    if (i < 0 || i >= temps.length - 1) {
+      dense[worldX] = { x: worldX, y: null };
+      continue;
+    }
 
     const t = hourIndex - i;
 
@@ -437,26 +446,27 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     const y2 = h - pad - ((temps[i + 1] - min) / (max - min)) * (h - pad * 2);
 
     const y = y1 + (y2 - y1) * t;
-
-    densePoints.push({ x, y });
+    dense[worldX] = { x: worldX, y };
   }
 
   // =========================================================
-  // 2. Draw the line using dense points
+  // 2) Draw the line using dense points
   // =========================================================
   ctx.beginPath();
   ctx.lineWidth = 3;
   ctx.strokeStyle = accent;
 
-  densePoints.forEach((p, i) => {
-    if (i === 0) ctx.moveTo(p.x, p.y);
+  let started = false;
+  for (let i = 0; i < dense.length; i++) {
+    const p = dense[i];
+    if (!p || p.y === null) { started = false; continue; }
+    if (!started) { ctx.moveTo(p.x, p.y); started = true; }
     else ctx.lineTo(p.x, p.y);
-  });
-
+  }
   ctx.stroke();
 
   // =========================================================
-  // 3. High + Low markers (still based on hour centers)
+  // 3) High / Low markers (still based on hour centers)
   // =========================================================
   const points = temps.map((t, i) => {
     const x = i * hourWidth + hourWidth / 2;
@@ -470,6 +480,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.beginPath();
   ctx.arc(points[hiIndex].x, points[hiIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillStyle = "#fff";
   ctx.fillText(`High: ${Math.round(max)}${symbol}`, points[hiIndex].x + 8, points[hiIndex].y - 8);
 
   // Low
@@ -478,13 +489,18 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.beginPath();
   ctx.arc(points[loIndex].x, points[loIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillStyle = "#fff";
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
 
   // =========================================================
-  // 4. Save dense points for hover
+  // 4) Cache base image (so hover draws are cheap) and save dense points
   // =========================================================
-  canvas._densePoints = densePoints;
+  // Save the current canvas pixels as an ImageData so we can restore quickly
+  const baseImage = ctx.getImageData(0, 0, Math.round(w * DPR), Math.round(h * DPR));
+  canvas._baseImage = baseImage;
+  canvas._densePoints = dense;
   canvas._hourWidth = hourWidth;
+  canvas._DPR = DPR;
 }
 
 // HOVER SYSTEM (with hover dot)
@@ -496,60 +512,114 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
 
   const dense = canvas._densePoints;
   const hourWidth = canvas._hourWidth;
+  const DPR = canvas._DPR || 1;
 
-  scroll.onmousemove = (e) => {
+  // Helper: restore base image quickly
+  function restoreBase() {
+    if (!canvas._baseImage) return;
+    // putImageData expects device pixels
+    ctx.putImageData(canvas._baseImage, 0, 0);
+  }
+
+  // Keep a small RAF loop to smooth auto-scroll and avoid race conditions
+  let pending = false;
+  let lastEvent = null;
+
+  function processMouse(e) {
     const rect = scroll.getBoundingClientRect();
     const xInScroll = e.clientX - rect.left;
-    const worldX = scroll.scrollLeft + xInScroll;
+    // worldX in CSS pixels (not device pixels)
+    let worldX = scroll.scrollLeft + xInScroll;
 
-    // Auto-scroll
+    // Clamp worldX to [0, dense.length-1]
+    if (worldX < 0) worldX = 0;
+    if (worldX >= dense.length) worldX = dense.length - 1;
+
+    // Auto-scroll when cursor near edges (do this BEFORE computing final worldX)
     const edge = 80;
-    const speed = 8;
-    if (xInScroll < edge) scroll.scrollLeft -= speed;
-    else if (xInScroll > rect.width - edge) scroll.scrollLeft += speed;
+    const speed = 10;
+    if (xInScroll < edge) {
+      scroll.scrollLeft = Math.max(0, scroll.scrollLeft - speed);
+      // recompute worldX after scroll
+      worldX = scroll.scrollLeft + xInScroll;
+    } else if (xInScroll > rect.width - edge) {
+      scroll.scrollLeft = Math.min(canvas.width - rect.width, scroll.scrollLeft + speed);
+      worldX = scroll.scrollLeft + xInScroll;
+    }
 
-    // Out of bounds
-    if (worldX < 0 || worldX >= dense.length) {
+    // Ensure worldX still in bounds
+    if (worldX < 0) worldX = 0;
+    if (worldX >= dense.length) worldX = dense.length - 1;
+
+    // Get dense point at nearest integer worldX
+    const idx = Math.round(worldX);
+    const p = dense[idx];
+    if (!p || p.y === null) {
       tooltip.style.opacity = 0;
-      drawHourlyChart(temps, labels, symbol, conditions);
+      restoreBase();
       return;
     }
 
-    const p = dense[Math.floor(worldX)];
-
-    // Check vertical distance
+    // Map mouse Y into canvas coordinates (CSS pixels)
     const mouseY = e.clientY - rect.top;
+
+    // If cursor is too far vertically, hide dot
     if (Math.abs(mouseY - p.y) > 25) {
       tooltip.style.opacity = 0;
-      drawHourlyChart(temps, labels, symbol, conditions);
+      restoreBase();
       return;
     }
 
-    // Determine hour
-    const hourIndex = Math.floor(worldX / hourWidth);
+    // Keep the dot visible: if dot is near left/right viewport edge, nudge scroll to center it
+    const visibleX = p.x - scroll.scrollLeft;
+    const margin = 60; // px margin inside scroll viewport
+    if (visibleX < margin) {
+      // center dot with margin
+      scroll.scrollLeft = Math.max(0, p.x - margin);
+    } else if (visibleX > rect.width - margin) {
+      scroll.scrollLeft = Math.min(canvas.width - rect.width, p.x - (rect.width - margin));
+    }
 
-    // Tooltip
+    // After any scroll adjustment, recompute visibleX and tooltip position
+    const visibleX2 = p.x - scroll.scrollLeft;
+
+    // Determine hour index for tooltip
+    const hourIndex = Math.floor(p.x / hourWidth + 0.5); // nearest hour center
+    const safeHourIndex = Math.max(0, Math.min(temps.length - 1, hourIndex));
+
     tooltip.innerHTML = `
-      <strong>${labels[hourIndex]}</strong><br>
-      ${Math.round(temps[hourIndex])}${symbol}<br>
-      ${conditions[hourIndex]}
+      <strong>${labels[safeHourIndex]}</strong><br>
+      ${Math.round(temps[safeHourIndex])}${symbol}<br>
+      ${conditions[safeHourIndex]}
     `;
-
     tooltip.style.opacity = 1;
-    tooltip.style.left = (p.x - scroll.scrollLeft) + "px";
+    tooltip.style.left = (visibleX2) + "px";
     tooltip.style.top = (p.y - 20) + "px";
 
-    // Draw dot
-    drawHourlyChart(temps, labels, symbol, conditions);
+    // Draw dot quickly by restoring base image and drawing circle
+    restoreBase();
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // Mouse handler schedules RAF to avoid multiple scroll+draw races
+  scroll.onmousemove = (e) => {
+    lastEvent = e;
+    if (!pending) {
+      pending = true;
+      requestAnimationFrame(() => {
+        processMouse(lastEvent);
+        pending = false;
+      });
+    }
   };
 
+  // Hide on leave
   scroll.onmouseleave = () => {
     tooltip.style.opacity = 0;
-    drawHourlyChart(temps, labels, symbol, conditions);
+    restoreBase();
   };
 }
 
