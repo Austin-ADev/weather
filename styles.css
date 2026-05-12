@@ -397,7 +397,7 @@ body::before {
   gap: 0.6rem;
   overflow-x: auto;
   padding-bottom: 0.4rem;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 #forecast:hover {
@@ -530,9 +530,9 @@ body::before {
 }
 
 #hourlyChart {
-  height: 120px;
-  display: block;
-  pointer-events: none;
+  touch-action: pan-x; /* allow horizontal scroll gestures to pass through */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #forecast {
@@ -540,18 +540,32 @@ body::before {
 }
 .hourly-tooltip {
   position: absolute;
+  pointer-events: none;
   background: rgba(0,0,0,0.65);
   color: white;
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 13px;
-  pointer-events: none;
   backdrop-filter: blur(4px);
-  transform: translate(-50%, -120%);
   white-space: nowrap;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 120ms ease, transform 120ms ease;
+  transform: translateX(-50%); /* center horizontally only */
+  z-index: 20;
+  will-change: transform, opacity, left, top;
+  max-width: calc(100% - 12px);
+  box-sizing: border-box;
 }
+.hourly-tooltip.measuring {
+  opacity: 1 !important;
+  pointer-events: none;
+  visibility: hidden; /* visible for layout but not shown to user */
+}
+
 .hourly-cursor {
   display: none !important;
 }
+
+#hourlyScroll { position: relative; overflow-x: auto; overflow-y: hidden; white-space: nowrap; scroll-behavior: auto; }
+#hourlyChart { touch-action: pan-x; -webkit-user-select: none; user-select: none; }
+.hourly-tooltip { position: absolute; pointer-events: none; transform: translateX(-50%); transition: opacity 120ms ease; z-index: 20; }

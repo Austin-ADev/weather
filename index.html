@@ -5,12 +5,58 @@
   <title>Weather</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="styles.css" />
-  <link rel="icon" type="image/png" sizes="512x512" href="favicon.png"/>   
+  <link rel="icon" type="image/png" sizes="512x512" href="favicon.png"/>
 
   <style>
-    .hidden-ui {
+    /* Small, critical overrides required for the hourly chart/tooltip behavior */
+    #hourlyScroll {
+      position: relative;            /* tooltip left/top are relative to this container */
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+      scroll-behavior: auto;         /* disable browser smooth scroll so JS easing can control it */
+      -webkit-overflow-scrolling: auto;
+    }
+
+    #hourlyInner {
+      display: inline-block;
+      position: relative;
+    }
+
+    #hourlyChart {
+      display: block;
+      height: 120px;
+      pointer-events: auto;
+      touch-action: pan-x;           /* allow horizontal swipes to scroll the container */
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .hourly-tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(0,0,0,0.65);
+      color: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      backdrop-filter: blur(4px);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 120ms ease, transform 120ms ease;
+      transform: translateX(-50%);   /* center horizontally by default */
+      z-index: 20;
+      will-change: left, top, transform, opacity;
+      box-sizing: border-box;
+      max-width: calc(100% - 12px);
+    }
+
+    .hourly-cursor {
       display: none !important;
     }
+
+    /* keep the rest of your app styles in styles.css; these are only the critical fixes */
+    .hidden-ui { display: none !important; }
   </style>
 </head>
 
@@ -23,7 +69,7 @@
     <!-- TOP BAR -->
     <div class="top-bar">
       <div class="search-wrapper">
-        <span class="search-icon">
+        <span class="search-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path fill="currentColor"
               d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79L19 20.5 20.5 19 15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
@@ -31,17 +77,17 @@
         </span>
 
         <input id="citySearch" type="text" placeholder="Search city..." autocomplete="off" />
-        <div id="searchResults" class="search-results"></div>
-        <div id="recentSearches" class="search-results"></div>
+        <div id="searchResults" class="search-results" aria-live="polite"></div>
+        <div id="recentSearches" class="search-results" aria-live="polite"></div>
       </div>
 
-      <button id="unitToggle" class="unit-btn">Metric</button>
+      <button id="unitToggle" class="unit-btn" aria-pressed="false">Metric</button>
     </div>
 
     <!-- FAVORITES -->
     <div class="favorites-bar">
-      <div id="favoritesList" class="favorites-list"></div>
-      <button id="favoriteToggle" class="fav-btn">☆</button>
+      <div id="favoritesList" class="favorites-list" role="list"></div>
+      <button id="favoriteToggle" class="fav-btn" aria-pressed="false">☆</button>
     </div>
 
     <!-- MAIN CONTENT -->
@@ -71,23 +117,23 @@
         <div class="forecast-panel">
           <div class="panel-title">Next 24 Hours</div>
 
-          <!-- Tooltip + cursor MUST be outside the scroll container -->
-         <div id="hourlyTooltip" class="hourly-tooltip"></div>
-         <div id="hourlyCursor" class="hourly-cursor"></div>
+          <!-- IMPORTANT: tooltip must be inside the scroll container so left/top are relative to it -->
+          <div id="hourlyScroll" aria-label="Hourly forecast" role="region">
+            <div id="hourlyInner">
+              <canvas id="hourlyChart" aria-hidden="true"></canvas>
+              <div id="forecast" aria-live="polite"></div>
+            </div>
 
-         <div id="hourlyScroll">
-           <div id="hourlyInner">
-              <canvas id="hourlyChart"></canvas>
-              <div id="forecast"></div>
-           </div>
+            <!-- Tooltip and cursor positioned relative to the scroll container -->
+            <div id="hourlyTooltip" class="hourly-tooltip" aria-hidden="true"></div>
+            <div id="hourlyCursor" class="hourly-cursor" aria-hidden="true"></div>
           </div>
         </div>
-
 
         <!-- DAILY FORECAST -->
         <div class="forecast-panel forecast-panel-daily">
           <div class="panel-title">Next 7 Days</div>
-          <div id="dailyForecast"></div>
+          <div id="dailyForecast" aria-live="polite"></div>
         </div>
       </div>
 
@@ -98,18 +144,19 @@
         src=""
         loading="lazy"
         title="Weather Radar"
+        aria-hidden="true"
       ></iframe>
     </div>
   </div>
 
-  <!-- UI TOGGLE -->
+  <!-- UI TOGGLE + small wheel-to-scroll helper -->
   <script>
     function toggleUI() {
       document.getElementById("ui").classList.toggle("hidden-ui");
     }
 
     window.addEventListener("keydown", e => {
-      if (e.key.toLowerCase() === "h") toggleUI();
+      if (e.key && e.key.toLowerCase() === "h") toggleUI();
     });
 
     // Horizontal scroll for hourly forecast using mouse wheel
@@ -117,8 +164,10 @@
       const hourlyScroll = document.getElementById("hourlyScroll");
 
       if (hourlyScroll) {
+        // wheel handler: convert vertical wheel to horizontal scroll
         hourlyScroll.addEventListener("wheel", (e) => {
           if (e.deltaY !== 0) {
+            // preventDefault is required so the page doesn't scroll vertically while we scroll horizontally
             e.preventDefault();
             hourlyScroll.scrollLeft += e.deltaY * 0.7;
           }
@@ -126,7 +175,6 @@
       }
     });
   </script>
-
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
