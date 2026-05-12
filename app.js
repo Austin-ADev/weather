@@ -474,13 +474,22 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.arc(points[loIndex].x, points[loIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
+
+  // Save points globally for hover dot
+  canvas._chartPoints = points;
+  canvas._min = min;
+  canvas._max = max;
+  canvas._pad = pad;
+  canvas._hourWidth = hourWidth;
 }
 
-// HOVER SYSTEM (bulletproof, works 100%)
+
+// HOVER SYSTEM (with hover dot)
 function setupHourlyHover(temps, labels, conditions, symbol) {
   const scroll = document.getElementById("hourlyScroll");
   const tooltip = document.getElementById("hourlyTooltip");
   const cursor = document.getElementById("hourlyCursor");
+  const canvas = document.getElementById("hourlyChart");
 
   const hourWidth = 80;
 
@@ -509,18 +518,41 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       ${conditions[index]}
     `;
 
-    // Tooltip position
     tooltip.style.opacity = 1;
     tooltip.style.left = (centerX - scroll.scrollLeft) + "px";
-    tooltip.style.top = "110px"; // adjust if needed
+    tooltip.style.top = "110px";
+
+    // -----------------------------
+    // Hover dot on the line
+    // -----------------------------
+    const points = canvas._chartPoints;
+    if (!points) return;
+
+    const p = points[index];
+
+    // Draw hover dot
+    const ctx = canvas.getContext("2d");
+    drawHourlyChart(temps, labels, symbol, conditions); // redraw chart cleanly
+
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.fill();
   };
 
   scroll.onmouseleave = () => {
     tooltip.style.opacity = 0;
     cursor.style.opacity = 0;
+
+    // Redraw chart without hover dot
+    const canvas = document.getElementById("hourlyChart");
+    const ctx = canvas.getContext("2d");
+    drawHourlyChart(temps, labels, symbol, conditions);
   };
 }
 
+
+// DAILY FORECAST
 function buildDaily(daily) {
   dailyForecastEl.innerHTML = "";
   const units = getUnitParams();
