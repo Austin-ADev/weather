@@ -524,15 +524,23 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   const canvas = document.getElementById("hourlyChart");
   const ctx = canvas.getContext("2d");
 
-  const dense = canvas._densePoints;
-  const hourWidth = canvas._hourWidth;
+  // Ensure dense points exist; if not, redraw chart once
+  if (!canvas._densePoints) {
+    drawHourlyChart(temps, labels, symbol, conditions);
+  }
+
+  const dense = canvas._densePoints || [];
+  const hourWidth = canvas._hourWidth || 80;
   const DPR = canvas._DPR || 1;
   const markers = canvas._markers || [];
 
+  // Cached base image (device pixels) and helper to restore it
   function restoreBase() {
     if (!canvas._baseImage) return;
+    // putImageData expects device pixel coords; baseImage was captured at device pixels
     ctx.putImageData(canvas._baseImage, 0, 0);
   }
+
   function contrastColor(hex) {
     if (!hex) return "#fff";
     if (hex[0] === "#") hex = hex.slice(1);
@@ -543,6 +551,7 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     return lum > 150 ? "#000" : "#fff";
   }
+
   function resetTooltipStyle() {
     tooltip.style.background = "";
     tooltip.style.color = "";
@@ -552,11 +561,31 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     tooltip.style.borderRadius = "";
   }
 
-  function easeTo(target, factor = 0.12) {
-    const current = scroll.scrollLeft;
-    const delta = target - current;
-    if (Math.abs(delta) < 0.5) { scroll.scrollLeft = target; return; }
-    scroll.scrollLeft = current + delta * factor;
+  // Smooth scroll loop variables
+  let scrollTarget = null;
+  let scrollAnimating = false;
+  function startScrollLoop() {
+    if (scrollAnimating) return;
+    scrollAnimating = true;
+    function step() {
+      if (scrollTarget === null) { scrollAnimating = false; return; }
+      const cur = scroll.scrollLeft;
+      const delta = scrollTarget - cur;
+      const factor = 0.12; // smaller = slower
+      if (Math.abs(delta) < 0.5) {
+        scroll.scrollLeft = scrollTarget;
+        scrollTarget = null;
+        scrollAnimating = false;
+        return;
+      }
+      scroll.scrollLeft = cur + delta * factor;
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  function easeTo(target) {
+    scrollTarget = Math.max(0, Math.min(canvas.width - scroll.clientWidth, target));
+    startScrollLoop();
   }
 
   function pointInMarker(worldX, mouseY, marker) {
@@ -569,24 +598,26 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     return false;
   }
 
-  // shared interaction logic
+  // Core interaction logic: worldX in CSS pixels, clientY is canvas-local Y (CSS pixels)
   function handleInteraction(worldX, clientY, allowAutoScroll = true) {
     if (worldX < 0) worldX = 0;
     if (worldX >= dense.length) worldX = dense.length - 1;
     const mouseY = clientY;
 
-    // marker detection
+    // 1) Marker detection (priority)
     for (let m of markers) {
       if (pointInMarker(worldX, mouseY, m)) {
+        // gently nudge scroll so marker stays visible
         const visibleX = m.x - scroll.scrollLeft;
         const margin = 60;
-        const viewportW = scroll.getBoundingClientRect().width;
+        const viewportW = scroll.clientWidth;
+        let target = null;
         if (allowAutoScroll) {
-          let target = null;
           if (visibleX < margin) target = Math.max(0, m.x - margin);
           else if (visibleX > viewportW - margin) target = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
-          if (target !== null) easeTo(target, 0.12);
+          if (target !== null) easeTo(target);
         }
+
         const visibleX2 = m.x - scroll.scrollLeft;
         const bg = m.color || "#000";
         const fg = contrastColor(bg);
@@ -616,7 +647,7 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       }
     }
 
-    // line detection
+    // 2) Line detection
     const idx = Math.round(worldX);
     const p = dense[idx];
     if (!p || p.y === null) {
@@ -634,14 +665,15 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       return { hit: false };
     }
 
+    // Dot visible — gently nudge scroll to keep it in view
     if (allowAutoScroll) {
       const margin = 60;
       const visibleX = p.x - scroll.scrollLeft;
-      const viewportW = scroll.getBoundingClientRect().width;
+      const viewportW = scroll.clientWidth;
       let target = null;
       if (visibleX < margin) target = Math.max(0, p.x - margin);
       else if (visibleX > viewportW - margin) target = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
-      if (target !== null) easeTo(target, 0.12);
+      if (target !== null) easeTo(target);
     }
 
     const visibleX2 = p.x - scroll.scrollLeft;
@@ -666,31 +698,27 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     return { hit: true, type: "line", point: p };
   }
 
-  // ---------- Pointer event handling (works for mouse, touch, pen) ----------
+  // Pointer state for dragging
   let isDragging = false;
   let activePointerId = null;
-  let dragMode = null; // "marker" or "line"
-  let dragMarker = null;
 
-  // pointerdown: decide whether to start drag (touch/pen) or treat as hover (mouse)
+  // Pointer event handlers attached to the canvas (captures pointer events reliably)
   function onPointerDown(ev) {
-    // only left button for mouse
+    // only left mouse button for mouse
     if (ev.pointerType === "mouse" && ev.button !== 0) return;
-    const rect = scroll.getBoundingClientRect();
-    const xInScroll = ev.clientX - rect.left;
-    const worldX = scroll.scrollLeft + xInScroll;
-    const mouseY = ev.clientY - rect.top;
+    const canvasRect = canvas.getBoundingClientRect();
+    const xInCanvas = ev.clientX - canvasRect.left;
+    const worldX = scroll.scrollLeft + xInCanvas;
+    const mouseY = ev.clientY - canvasRect.top;
 
     // test markers first
     for (let m of markers) {
       if (pointInMarker(worldX, mouseY, m)) {
         isDragging = true;
         activePointerId = ev.pointerId;
-        dragMode = "marker";
-        dragMarker = m;
-        ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId);
+        try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
         ev.preventDefault();
-        handleInteraction(worldX, ev.clientY, true);
+        handleInteraction(worldX, mouseY, true);
         return;
       }
     }
@@ -698,70 +726,78 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     // test line proximity
     const idx = Math.round(worldX);
     const p = dense[idx];
-    if (p && p.y !== null && Math.abs((ev.clientY - rect.top) - p.y) <= 25) {
+    if (p && p.y !== null && Math.abs(mouseY - p.y) <= 25) {
       isDragging = true;
       activePointerId = ev.pointerId;
-      dragMode = "line";
-      dragMarker = null;
-      ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId);
+      try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
       ev.preventDefault();
-      handleInteraction(worldX, ev.clientY, true);
+      handleInteraction(worldX, mouseY, true);
       return;
     }
 
-    // if mouse, still allow hover behavior; if touch/pen and not near line, do nothing (allow page scroll)
+    // if not near line/marker and pointerType is mouse, still show hover
+    if (ev.pointerType === "mouse") {
+      handleInteraction(worldX, ev.clientY, true);
+    }
   }
 
   function onPointerMove(ev) {
-    // if dragging, only respond to the active pointer
+    const canvasRect = canvas.getBoundingClientRect();
+    const xInCanvas = ev.clientX - canvasRect.left;
+    const worldX = scroll.scrollLeft + xInCanvas;
+    const mouseY = ev.clientY - canvasRect.top;
+
     if (isDragging) {
       if (ev.pointerId !== activePointerId) return;
-      const rect = scroll.getBoundingClientRect();
-      const xInScroll = ev.clientX - rect.left;
-      const worldX = scroll.scrollLeft + xInScroll;
       ev.preventDefault();
       handleInteraction(worldX, ev.clientY, true);
       return;
     }
 
-    // not dragging: for mouse pointer, treat as hover
+    // not dragging: mouse pointer acts as hover
     if (ev.pointerType === "mouse") {
-      const rect = scroll.getBoundingClientRect();
-      const xInScroll = ev.clientX - rect.left;
-      const worldX = scroll.scrollLeft + xInScroll;
       handleInteraction(worldX, ev.clientY, true);
     }
   }
 
-  function endPointer(ev) {
+  function onPointerUp(ev) {
     if (isDragging && ev.pointerId === activePointerId) {
       isDragging = false;
       activePointerId = null;
-      dragMode = null;
-      dragMarker = null;
-      try { ev.target.releasePointerCapture && ev.target.releasePointerCapture(ev.pointerId); } catch (e) {}
+      try { canvas.releasePointerCapture && canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
       tooltip.style.opacity = 0;
       resetTooltipStyle();
       restoreBase();
     }
   }
 
-  // attach pointer listeners to the scroll container
-  scroll.addEventListener("pointerdown", onPointerDown, { passive: false });
-  scroll.addEventListener("pointermove", onPointerMove, { passive: false });
-  scroll.addEventListener("pointerup", endPointer, { passive: true });
-  scroll.addEventListener("pointercancel", endPointer, { passive: true });
-  scroll.addEventListener("pointerleave", (ev) => {
+  function onPointerCancel(ev) {
+    if (isDragging && ev.pointerId === activePointerId) {
+      isDragging = false;
+      activePointerId = null;
+      try { canvas.releasePointerCapture && canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
+      tooltip.style.opacity = 0;
+      resetTooltipStyle();
+      restoreBase();
+    }
+  }
+
+  // Attach listeners
+  canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
+  window.addEventListener("pointermove", onPointerMove, { passive: false });
+  window.addEventListener("pointerup", onPointerUp, { passive: true });
+  window.addEventListener("pointercancel", onPointerCancel, { passive: true });
+
+  // When pointer leaves canvas and not dragging, hide tooltip
+  canvas.addEventListener("pointerleave", (ev) => {
     if (!isDragging) {
       tooltip.style.opacity = 0;
       resetTooltipStyle();
       restoreBase();
     }
   }, { passive: true });
-
-  // fallback: if you previously added touch listeners, remove them to avoid conflicts
-  // (If you added them elsewhere, ensure they are removed or not duplicated.)
 }
+
 
 // DAILY FORECAST
 function buildDaily(daily) {
