@@ -1,5 +1,8 @@
 // forecast-builder.js
-// Final fix: marker lock color + tooltip + strict lock + auto-scroll only while hovering
+// Fixed forecast builder: consistent world coords, device-pixel-safe dot drawing,
+// marker lock + color, and targeted logging.
+//
+// Exports: buildHourly, drawHourlyChart, createBaseBitmapSnapshot, setupHourlyHover, setupHourlyTap, buildDaily
 
 import { getUnitParams } from './utils.js';
 import { WEATHER_TEXT } from './constants.js';
@@ -8,31 +11,24 @@ import { WEATHER_TEXT } from './constants.js';
 // buildHourly
 // -----------------------------
 export async function buildHourly(hourly, timezone) {
+  console.log("[FB] buildHourly() start", { hasHourly: !!hourly, timezone });
   const forecastEl = document.getElementById("forecast");
-  if (!forecastEl) return;
+  if (!forecastEl) { console.warn("[FB] buildHourly: #forecast not found"); return; }
   forecastEl.innerHTML = "";
   const units = getUnitParams();
-  if (!hourly || !hourly.time) return;
+  if (!hourly || !hourly.time) { console.warn("[FB] buildHourly: hourly missing"); return; }
 
   const now = new Date().toLocaleString("en-US", { timeZone: timezone });
   const currentHour = new Date(now).getHours();
 
-  let startIndex = hourly.time.findIndex(t => {
-    const d = new Date(t);
-    return d.getHours() === currentHour;
-  });
+  let startIndex = hourly.time.findIndex(t => new Date(t).getHours() === currentHour);
   if (startIndex < 0) startIndex = 0;
-
   const endIndex = Math.min(startIndex + 24, hourly.time.length);
 
-  const temps = [];
-  const labels = [];
-  const conditions = [];
-
+  const temps = [], labels = [], conditions = [];
   for (let i = startIndex; i < endIndex; i++) {
     const t = new Date(hourly.time[i]);
     const hour = t.toLocaleTimeString([], { hour: "numeric" });
-
     temps.push(hourly.temperature_2m[i]);
     labels.push(hour);
     conditions.push(WEATHER_TEXT[hourly.weather_code[i]] || "—");
@@ -48,23 +44,27 @@ export async function buildHourly(hourly, timezone) {
   }
 
   await drawHourlyChart(temps, labels, units.tempSymbol, conditions);
-  try { await createBaseBitmapSnapshot(); } catch (e) { /* non-fatal */ }
-  try { setupHourlyHover(temps, labels, conditions, units.tempSymbol); } catch (e) { console.warn(e); }
-  try { setupHourlyTap(temps, labels, conditions, units.tempSymbol); } catch (e) { console.warn(e); }
+  try { await createBaseBitmapSnapshot(); } catch (e) { console.warn("[FB] createBaseBitmapSnapshot failed", e); }
+  try { setupHourlyHover(temps, labels, conditions, units.tempSymbol); } catch (e) { console.warn("[FB] setupHourlyHover failed", e); }
+  try { setupHourlyTap(temps, labels, conditions, units.tempSymbol); } catch (e) { console.warn("[FB] setupHourlyTap failed", e); }
+
+  console.log("[FB] buildHourly() done");
 }
 
 // -----------------------------
 // drawHourlyChart
 // -----------------------------
 export async function drawHourlyChart(temps, labels, symbol, conditions) {
+  console.log("[FB] drawHourlyChart() start", { tempsLen: temps.length });
   const canvas = document.getElementById("hourlyChart");
-  if (!canvas) return;
+  if (!canvas) { console.warn("[FB] drawHourlyChart: #hourlyChart not found"); return; }
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) { console.warn("[FB] drawHourlyChart: 2d context not available"); return; }
 
+  // CSS layout sizes (we treat dense sampling in CSS pixels)
   const hourWidth = 80; // CSS px per hour
   const cssH = 120;
-  const cssW = Math.round(hourWidth * temps.length); // integer CSS width
+  const cssW = Math.round(hourWidth * temps.length);
   const DPR = window.devicePixelRatio || 1;
 
   // set CSS size and backing store size
@@ -73,19 +73,22 @@ export async function drawHourlyChart(temps, labels, symbol, conditions) {
   canvas.width = Math.round(cssW * DPR);
   canvas.height = Math.round(cssH * DPR);
 
-  // store CSS width for handlers
+  // store for handlers
   canvas._cssWidth = cssW;
   canvas._cssHeight = cssH;
   canvas._DPR = DPR;
   canvas._hourWidth = hourWidth;
 
-  // draw in CSS pixels
+  console.log("[FB] canvas sizing", { cssW, cssH, DPR, backingW: canvas.width, backingH: canvas.height });
+
+  // draw in CSS pixels for sampling, but remember backing store is device pixels
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
   const w = cssW, h = cssH, pad = 20;
   const max = Math.max(...temps), min = Math.min(...temps);
+  console.log("[FB] temps range", { min, max });
 
-  // dense sampling: one sample per CSS pixel (length = cssW)
+  // dense sampling: one sample per CSS pixel
   const dense = new Array(w);
   for (let x = 0; x < w; x++) {
     const hourIndex = x / hourWidth;
@@ -102,7 +105,8 @@ export async function drawHourlyChart(temps, labels, symbol, conditions) {
     dense[x] = { x, y: y1 + (y2 - y1) * t };
   }
 
-  // draw polyline
+  console.log("[FB] dense sampling complete", { denseLen: dense.length, expected: cssW });
+  // draw polyline (CSS pixels)
   ctx.clearRect(0, 0, w, h);
   ctx.beginPath();
   ctx.lineWidth = 3;
@@ -163,9 +167,13 @@ export async function drawHourlyChart(temps, labels, symbol, conditions) {
   canvas._densePoints = dense;
   canvas._markers = markers;
 
-  // cache ImageData fallback and create ImageBitmap snapshot
-  try { canvas._baseImage = ctx.getImageData(0, 0, Math.round(cssW * DPR), Math.round(cssH * DPR)); } catch (e) { canvas._baseImage = null; }
-  try { canvas._baseBitmap = await createImageBitmap(canvas); } catch (e) { canvas._baseBitmap = null; }
+  console.log("[FB] markers stored", { markers });
+
+  // cache ImageData fallback and create ImageBitmap snapshot (device pixels)
+  try { canvas._baseImage = ctx.getImageData(0, 0, Math.round(cssW * DPR), Math.round(cssH * DPR)); } catch (e) { canvas._baseImage = null; console.warn("[FB] getImageData failed", e); }
+  try { canvas._baseBitmap = await createImageBitmap(canvas); } catch (e) { canvas._baseBitmap = null; console.warn("[FB] createImageBitmap failed", e); }
+
+  console.log("[FB] drawHourlyChart() done");
 }
 
 // -----------------------------
@@ -176,9 +184,9 @@ export async function createBaseBitmapSnapshot() {
   if (!canvas) return;
   try {
     canvas._baseBitmap = await createImageBitmap(canvas);
-    console.log("baseBitmap ready");
+    console.log("[FB] baseBitmap ready");
   } catch (e) {
-    console.warn("createImageBitmap failed", e);
+    console.warn("[FB] createBaseBitmapSnapshot failed", e);
     canvas._baseBitmap = null;
   }
 }
@@ -187,12 +195,13 @@ export async function createBaseBitmapSnapshot() {
 // setupHourlyHover
 // -----------------------------
 export function setupHourlyHover(temps, labels, conditions, symbol) {
+  console.log("[FB] setupHourlyHover() start", { tempsLen: temps.length });
   const canvas = document.getElementById("hourlyChart");
   const scroll = document.getElementById("hourlyScroll");
   const tooltip = document.getElementById("hourlyTooltip");
-  if (!canvas || !scroll || !tooltip) return;
+  if (!canvas || !scroll || !tooltip) { console.warn("[FB] setupHourlyHover: missing DOM elements"); return; }
   const ctx = canvas.getContext("2d");
-  if (!canvas._densePoints) return;
+  if (!canvas._densePoints) { console.warn("[FB] setupHourlyHover: canvas._densePoints missing"); return; }
 
   const dense = canvas._densePoints;
   const markers = canvas._markers || [];
@@ -201,21 +210,22 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
   const DPR = canvas._DPR || window.devicePixelRatio || 1;
   const cssH = canvas._cssHeight || 120;
 
-  // state
+  console.log("[FB] hover init", { cssW, cssH, hourWidth, DPR, denseLen: dense.length, markers });
+
+  // state (world coords)
   const hover = { active: false, screenX: 0, screenY: 0 };
   let lastPointerX = null, lastPointerTime = 0;
 
-  // unified animation state
-  let scrollTarget = null;
+  // world-based dot state
   let dotWorldX = Math.max(0, Math.min(dense.length - 1, scroll.scrollLeft + (scroll.clientWidth / 2)));
-  let dotY = (function(){ const s = sampleYAtWorldX(dotWorldX); return s != null ? s : cssH/2; })();
+  let dotY = sampleYAtWorldX(dotWorldX) ?? cssH / 2;
   let targetWorldX = dotWorldX;
   let targetY = dotY;
   let rafId = null;
 
-  // marker lock state
-  let markerLock = null; // { x, y, color, index }
-  const MARKER_HYSTERESIS = 22; // px screen hysteresis to keep lock
+  // marker lock
+  let markerLock = null;
+  const MARKER_HYSTERESIS = 22;
 
   let pauseAutoScroll = false, pauseTimer = null;
   const PAUSE_MS = 180;
@@ -226,52 +236,112 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
   function cancelAutoScroll() { scrollTarget = null; }
   function ensureRaf() { if (!rafId) rafId = requestAnimationFrame(unifiedStep); }
 
-  // IMPORTANT: only allow JS auto-scroll when pointer is actively over the chart
-  function easeScrollTo(target) {
-    if (pauseAutoScroll || userScrolling || !hover.active) return;
+  // easeScrollTo expects a worldX target (left position)
+  let scrollTarget = null;
+  function easeScrollTo(worldLeftTarget) {
+    if (pauseAutoScroll || userScrolling || !hover.active) {
+      console.log("[FB] easeScrollTo blocked", { pauseAutoScroll, userScrolling, hoverActive: hover.active });
+      return;
+    }
     const maxLeft = Math.max(0, cssW - scroll.clientWidth);
-    scrollTarget = Math.max(0, Math.min(maxLeft, target));
+    scrollTarget = Math.max(0, Math.min(maxLeft, worldLeftTarget));
+    console.log("[FB] easeScrollTo -> scrollTarget", { scrollTarget, maxLeft });
     ensureRaf();
   }
 
+  // restore base: draw cached base bitmap (device pixels) into backing store
   function restoreBase() {
     if (canvas._baseBitmap) {
-      ctx.save(); ctx.setTransform(1,0,0,1,0,0);
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.drawImage(canvas._baseBitmap, 0, 0, canvas.width, canvas.height);
-      ctx.setTransform(DPR,0,0,DPR,0,0); ctx.restore();
+      // draw base bitmap in device pixels
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      try {
+        ctx.drawImage(canvas._baseBitmap, 0, 0, canvas.width, canvas.height);
+      } catch (e) {
+        // fallback to putImageData if drawImage fails
+        if (canvas._baseImage) {
+          try { ctx.putImageData(canvas._baseImage, 0, 0); } catch (ee) { /* ignore */ }
+        }
+      }
+      // restore CSS-pixel transform for subsequent sampling/drawing convenience
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.restore();
       return true;
     }
     if (canvas._baseImage) {
-      try { ctx.putImageData(canvas._baseImage, 0, 0); return true; } catch(e) {}
+      try {
+        ctx.putImageData(canvas._baseImage, 0, 0);
+        return true;
+      } catch (e) { /* ignore */ }
     }
     return false;
   }
 
-  function drawDotAtScreenX(screenX, y, color = "#fff") {
-    restoreBase();
-    ctx.save(); ctx.setTransform(DPR,0,0,DPR,0,0);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(screenX, y, 6, 0, Math.PI*2);
-    ctx.fill();
-    if (color === "#fff") { ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.stroke(); }
-    ctx.restore();
+  // draw dot using device pixels to avoid transform mismatch
+  function drawDotAtScreenX(screenX_css, y_css, color = "#fff") {
+    // screenX_css and y_css are CSS pixels relative to scroll container
+    // convert to device pixels
+    const sx = Math.round(screenX_css * DPR);
+    const sy = Math.round(y_css * DPR);
+    const radius = Math.max(1, Math.round(6 * DPR));
+
+    // draw base bitmap first in device pixels
+    if (canvas._baseBitmap) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      try { ctx.drawImage(canvas._baseBitmap, 0, 0, canvas.width, canvas.height); } catch (e) {
+        if (canvas._baseImage) try { ctx.putImageData(canvas._baseImage, 0, 0); } catch (ee) {}
+      }
+      // draw dot in device pixels
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+      ctx.fill();
+      if (color === "#fff") {
+        ctx.lineWidth = Math.max(1, Math.round(1.5 * DPR));
+        ctx.strokeStyle = "rgba(0,0,0,0.18)";
+        ctx.stroke();
+      }
+      // restore CSS transform for other code that expects it
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.restore();
+    } else {
+      // fallback: draw using CSS transform (less robust)
+      ctx.save();
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(screenX_css, y_css, 6, 0, Math.PI * 2);
+      ctx.fill();
+      if (color === "#fff") { ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.stroke(); }
+      ctx.restore();
+    }
+
+    console.log("[FB] drawDot", { screenX_css, y_css, color, dotWorldX, scrollLeft: scroll.scrollLeft, DPR });
   }
 
+  // sample in world coords (CSS pixels)
   function sampleYAtWorldX(worldX) {
     const x = Math.max(0, Math.min(dense.length - 1, worldX));
     const i = Math.floor(x);
     const t = x - i;
     const a = dense[i];
     const b = dense[i + 1] || a;
-    if (!a || a.y == null) return null;
-    if (!b || b.y == null) return a.y;
-    return a.y + (b.y - a.y) * t;
+    if (!a || a.y == null) { console.log("[FB] sampleYAtWorldX -> null (a missing)", { worldX, i }); return null; }
+    if (!b || b.y == null) { console.log("[FB] sampleYAtWorldX -> a.y (b missing)", { worldX, i, aY: a.y }); return a.y; }
+    const y = a.y + (b.y - a.y) * t;
+    // occasional debug neighborhood
+    if (Math.abs(worldX - dotWorldX) < 2) {
+      console.log("[FB] sampleYAtWorldX neighborhood", { worldX, i, t, aY: a.y, bY: b.y, resultY: y });
+    }
+    return y;
   }
 
   function clampIndex(i, len) { return Math.max(0, Math.min(len - 1, i)); }
 
+  // tooltip placement clamps to visible area but does not affect dot drawing
   function computeTooltipLeftAndTransform(screenX) {
     const tipW = tooltip.getBoundingClientRect().width || 120;
     const half = tipW / 2;
@@ -281,24 +351,23 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     return { leftPx: Math.max(minCenter, Math.min(maxCenter, screenX)), useCenterTransform: false };
   }
 
-  function updateTooltipAndDraw(screenX, y, hourIndex, color = "#fff", markerType = null, markerTemp = null) {
-    const { leftPx, useCenterTransform } = computeTooltipLeftAndTransform(screenX);
+  function updateTooltipAndDraw(screenX_css, y_css, hourIndex, color = "#fff", markerType = null, markerTemp = null) {
+    const { leftPx, useCenterTransform } = computeTooltipLeftAndTransform(screenX_css);
     if (markerType && markerTemp != null) {
-      // marker tooltip (HIGH / LOW)
       tooltip.innerHTML = `<strong>${markerType.toUpperCase()}: ${Math.round(markerTemp)}${symbol}</strong>`;
     } else {
       tooltip.innerHTML = `<strong>${labels[hourIndex]}</strong><div>${Math.round(temps[hourIndex])}${symbol}</div>`;
     }
     tooltip.style.left = leftPx + "px";
-    tooltip.style.top = (y - 20) + "px";
+    tooltip.style.top = (y_css - 20) + "px";
     tooltip.style.opacity = 1;
     tooltip.style.transform = useCenterTransform ? "translateX(-50%)" : "translateX(0)";
-    drawDotAtScreenX(screenX, y, color);
+    drawDotAtScreenX(screenX_css, y_css, color);
   }
 
-  // unified RAF: animate scroll and dot (X and Y)
+  // unified RAF: animate scroll and dot (world coords)
   function unifiedStep() {
-    // scroll easing
+    // scroll easing (scrollTarget is world-left)
     if (scrollTarget !== null) {
       const cur = scroll.scrollLeft;
       const d = scrollTarget - cur;
@@ -307,7 +376,7 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
       else scroll.scrollLeft = cur + d * sf;
     }
 
-    // dot soft-snap X and Y (unless markerLock engaged, in which case targets are marker coords)
+    // dot soft-snap X and Y (unless markerLock engaged)
     const dx = targetWorldX - dotWorldX;
     const dy = targetY - dotY;
     const xf = 0.22, yf = 0.28;
@@ -315,14 +384,15 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     if (Math.abs(dy) > 0.25) dotY += dy * yf; else dotY = targetY;
 
     if (hover.active) {
-      const screenX = Math.max(0, Math.min(scroll.clientWidth, dotWorldX - scroll.scrollLeft));
+      // compute screenX from world coords (do NOT clamp)
+      const screenX_css = dotWorldX - scroll.scrollLeft;
       const hourIndex = clampIndex(Math.floor(dotWorldX / hourWidth + 0.5), temps.length);
 
       // color: marker color if locked, else white
       const color = markerLock ? (markerLock.color || "#fff") : "#fff";
       const markerType = markerLock ? markerLock.type : null;
       const markerTemp = markerLock ? markerLock.temp : null;
-      updateTooltipAndDraw(screenX, dotY, hourIndex, color, markerType, markerTemp);
+      updateTooltipAndDraw(screenX_css, dotY, hourIndex, color, markerType, markerTemp);
     }
 
     if (scrollTarget !== null || Math.abs(targetWorldX - dotWorldX) > 0.25 || Math.abs(targetY - dotY) > 0.25) {
@@ -332,7 +402,7 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     }
   }
 
-  // pointer scheduling (pointermove covers mouse/touch/pen)
+  // pointer scheduling
   function schedulePointerUpdate(screenX, screenY) {
     const now = performance.now();
     let velocity = 0;
@@ -344,18 +414,18 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     lastPointerX = screenX;
     lastPointerTime = now;
 
-    // pause auto-scroll while moving fast
     if (velocity > VELOCITY_THRESHOLD) {
       pauseAutoScroll = true;
       cancelAutoScroll();
       clearTimeout(pauseTimer);
       pauseTimer = setTimeout(() => { pauseAutoScroll = false; }, PAUSE_MS);
+      console.log("[FB] pointer velocity high, pausing auto-scroll", { velocity });
     } else {
       clearTimeout(pauseTimer);
       pauseTimer = setTimeout(() => { pauseAutoScroll = false; }, PAUSE_MS);
     }
 
-    hover.screenX = Math.max(0, Math.min(scroll.clientWidth, screenX));
+    hover.screenX = screenX;
     hover.screenY = screenY;
     hover.active = true;
 
@@ -374,43 +444,45 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
       if (radial || rectHit) { foundMarker = m; break; }
     }
 
+    console.log("[FB] pointer", { screenX, screenY, worldFromPointer, foundMarker: !!foundMarker, markerLock: !!markerLock });
+
     if (foundMarker) {
-      // engage marker lock immediately: set targets to exact marker coords and snap dot to them
+      // engage marker lock: exact world coords
       markerLock = { x: foundMarker.x, y: foundMarker.y, color: foundMarker.color, index: foundMarker.index, type: foundMarker.type, temp: foundMarker.temp };
       targetWorldX = foundMarker.x;
       targetY = foundMarker.y;
-      // snap immediately to avoid any sampling mismatch
+      // snap immediately
       dotWorldX = targetWorldX;
       dotY = targetY;
+      console.log("[FB] markerLock ENGAGED", markerLock);
 
-      // nudge scroll if marker near edges (only if pointer is over chart)
-      const markerScreenX = Math.max(0, Math.min(scroll.clientWidth, foundMarker.x - scroll.scrollLeft));
+      // nudge scroll if marker near edges (only while hovering)
+      const markerScreenX = foundMarker.x - scroll.scrollLeft;
       const margin = 60, vw = scroll.clientWidth;
       if (!pauseAutoScroll && !userScrolling && hover.active) {
         if (markerScreenX < margin) easeScrollTo(Math.max(0, foundMarker.x - margin));
         else if (markerScreenX > vw - margin) easeScrollTo(Math.min(cssW - vw, foundMarker.x - (vw - margin)));
       }
     } else if (markerLock) {
-      // if locked, check hysteresis in screen space; keep lock while pointer remains near marker
+      // maintain lock while pointer remains near marker (hysteresis)
       const lockedScreenX = markerLock.x - scroll.scrollLeft;
       const lockedScreenY = markerLock.y;
       const dist = Math.hypot(hover.screenX - lockedScreenX, hover.screenY - lockedScreenY);
       if (dist <= MARKER_HYSTERESIS) {
-        // keep lock: targets remain marker coords (no change)
         targetWorldX = markerLock.x;
         targetY = markerLock.y;
-        // ensure dot is exactly on marker (prevent drift)
         dotWorldX = targetWorldX;
         dotY = targetY;
+        // keep lock
       } else {
-        // release lock and fall back to pointer sampling
+        console.log("[FB] markerLock RELEASED", { dist, MARKER_HYSTERESIS });
         markerLock = null;
         targetWorldX = Math.max(0, Math.min(dense.length - 1, worldFromPointer));
         const sampledY = sampleYAtWorldX(targetWorldX);
         targetY = sampledY != null ? sampledY : targetY;
       }
     } else {
-      // normal pointer: pointer has priority
+      // normal pointer: set target in world coords
       targetWorldX = Math.max(0, Math.min(dense.length - 1, worldFromPointer));
       const sampledY = sampleYAtWorldX(targetWorldX);
       targetY = sampledY != null ? sampledY : targetY;
@@ -442,6 +514,7 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     clearTimeout(pauseTimer);
     pauseAutoScroll = false;
     markerLock = null;
+    console.log("[FB] pointer left chart, cleared hover and markerLock");
   }
 
   function onUserScroll() {
@@ -449,9 +522,10 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     cancelAutoScroll();
     clearTimeout(userScrollTimer);
     userScrollTimer = setTimeout(() => { userScrolling = false; }, USER_SCROLL_IDLE);
+    console.log("[FB] user scroll detected");
   }
 
-  // attach pointer handlers (avoid duplicates)
+  // attach handlers (avoid duplicates)
   canvas.removeEventListener("pointermove", canvas._hourlyPointerMove);
   canvas.removeEventListener("pointerleave", canvas._hourlyPointerLeave);
   canvas._hourlyPointerMove = onPointerMove;
@@ -459,7 +533,6 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
   canvas.addEventListener("pointermove", onPointerMove, { passive: true });
   canvas.addEventListener("pointerleave", onPointerLeave, { passive: true });
 
-  // user scroll detection
   scroll.removeEventListener("wheel", scroll._hourlyWheel);
   scroll._hourlyWheel = onUserScroll;
   scroll.addEventListener("wheel", onUserScroll, { passive: true });
@@ -474,6 +547,7 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     cancelAutoScroll();
     clearTimeout(userScrollTimer);
     userScrollTimer = setTimeout(() => { userScrolling = false; }, USER_SCROLL_IDLE);
+    console.log("[FB] native scroll event");
   };
   scroll.addEventListener("scroll", scroll._hourlyScroll, { passive: true });
 
@@ -483,32 +557,24 @@ export function setupHourlyHover(temps, labels, conditions, symbol) {
     cancelAutoScroll();
     clearTimeout(userScrollTimer);
     userScrollTimer = setTimeout(() => { userScrolling = false; }, USER_SCROLL_IDLE);
+    console.log("[FB] touchmove detected");
   };
   scroll.addEventListener("touchmove", scroll._hourlyTouchMove, { passive: true });
 
-  // helper used inside this scope
-  function sampleYAtWorldX(worldX) {
-    const x = Math.max(0, Math.min(dense.length - 1, worldX));
-    const i = Math.floor(x);
-    const t = x - i;
-    const a = dense[i];
-    const b = dense[i + 1] || a;
-    if (!a || a.y == null) return null;
-    if (!b || b.y == null) return a.y;
-    return a.y + (b.y - a.y) * t;
-  }
+  console.log("[FB] setupHourlyHover() done");
 }
 
 // -----------------------------
 // setupHourlyTap
 // -----------------------------
 export function setupHourlyTap(temps, labels, conditions, symbol) {
+  console.log("[FB] setupHourlyTap() start");
   const canvas = document.getElementById("hourlyChart");
   const scroll = document.getElementById("hourlyScroll");
   const tooltip = document.getElementById("hourlyTooltip");
-  if (!canvas || !scroll || !tooltip) return;
+  if (!canvas || !scroll || !tooltip) { console.warn("[FB] setupHourlyTap: missing DOM elements"); return; }
   const ctx = canvas.getContext("2d");
-  if (!canvas._densePoints) return;
+  if (!canvas._densePoints) { console.warn("[FB] setupHourlyTap: canvas._densePoints missing"); return; }
 
   const dense = canvas._densePoints;
   const markers = canvas._markers || [];
@@ -524,10 +590,7 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
 
   let scrollTarget = null, rafId = null;
 
-  function cancelAutoScroll() {
-    scrollTarget = null;
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-  }
+  function cancelAutoScroll() { scrollTarget = null; if (rafId) { cancelAnimationFrame(rafId); rafId = null; } }
 
   function easeScrollTo(target, keepScreenX = null) {
     if (pauseAutoScroll || userScrolling) return;
@@ -561,7 +624,9 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
   function restoreBase() {
     if (canvas._baseBitmap) {
       ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.drawImage(canvas._baseBitmap, 0, 0, canvas.width, canvas.height);
+      try { ctx.drawImage(canvas._baseBitmap, 0, 0, canvas.width, canvas.height); } catch (e) {
+        if (canvas._baseImage) try { ctx.putImageData(canvas._baseImage, 0, 0); } catch (ee) {}
+      }
       ctx.setTransform(DPR,0,0,DPR,0,0); ctx.restore();
       return true;
     }
@@ -582,11 +647,26 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
   }
 
   function drawDotAtScreenX(screenX, y, color = "#fff") {
-    restoreBase();
-    ctx.save(); ctx.setTransform(DPR,0,0,DPR,0,0);
-    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(screenX, y, 6, 0, Math.PI*2); ctx.fill();
-    if (color === "#fff") { ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.stroke(); }
-    ctx.restore();
+    // device-pixel-safe draw (same approach as hover)
+    const DPR = canvas._DPR || window.devicePixelRatio || 1;
+    const sx = Math.round(screenX * DPR);
+    const sy = Math.round(y * DPR);
+    const radius = Math.max(1, Math.round(6 * DPR));
+    if (canvas._baseBitmap) {
+      ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+      try { ctx.drawImage(canvas._baseBitmap, 0, 0, canvas.width, canvas.height); } catch (e) {
+        if (canvas._baseImage) try { ctx.putImageData(canvas._baseImage, 0, 0); } catch (ee) {}
+      }
+      ctx.beginPath(); ctx.fillStyle = color; ctx.arc(sx, sy, radius, 0, Math.PI*2); ctx.fill();
+      if (color === "#fff") { ctx.lineWidth = Math.max(1, Math.round(1.5 * DPR)); ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.stroke(); }
+      ctx.setTransform(DPR,0,0,DPR,0,0); ctx.restore();
+    } else {
+      ctx.save(); ctx.setTransform(DPR,0,0,DPR,0,0);
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(screenX, y, 6, 0, Math.PI*2); ctx.fill();
+      if (color === "#fff") { ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.stroke(); }
+      ctx.restore();
+    }
+    console.log("[FB] tap drawDot", { screenX, y, color, scrollLeft: scroll.scrollLeft });
   }
 
   function clampTooltipLeft(screenX) {
@@ -594,12 +674,8 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
     const half = tipW / 2;
     const minCenter = 6 + half;
     const maxCenter = scroll.clientWidth - 6 - half;
-    if (screenX >= minCenter && screenX <= maxCenter) {
-      tooltip.style.transform = "translateX(-50%)";
-      return screenX;
-    }
-    tooltip.style.transform = "translateX(0)";
-    return Math.max(minCenter, Math.min(maxCenter, screenX));
+    if (screenX >= minCenter && screenX <= maxCenter) { tooltip.style.transform = "translateX(-50%)"; return screenX; }
+    tooltip.style.transform = "translateX(0)"; return Math.max(minCenter, Math.min(maxCenter, screenX));
   }
 
   function pauseBriefly() {
@@ -619,30 +695,29 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
     if (ev.isPrimary === false) return;
     const rect = canvas.getBoundingClientRect();
     const xInCanvas = ev.clientX - rect.left;
-    const screenX = Math.max(0, Math.min(scroll.clientWidth, xInCanvas));
+    const screenX = xInCanvas;
     const canvasY = ev.clientY - rect.top;
     const worldX = scroll.scrollLeft + screenX;
 
     pauseBriefly();
 
-    // marker priority: detect in screen space
+    // marker priority (screen space)
     for (const m of markers) {
       const markerScreenX = m.x - scroll.scrollLeft;
       const dx = Math.abs(screenX - markerScreenX), dy = Math.abs(canvasY - m.y);
       if (Math.hypot(dx,dy) <= (m.hitRadius||0) || (dx <= (m.hitBox?.w||0)/2 && dy <= (m.hitBox?.h||0)/2)) {
-        // snap exactly to marker and use its color and tooltip label
         const label = m.type === "high" ? `HIGH: ${Math.round(m.temp)}${symbol}` : `LOW: ${Math.round(m.temp)}${symbol}`;
         tooltip.innerHTML = `<strong>${label}</strong>`;
         tooltip.style.left = clampTooltipLeft(markerScreenX) + "px";
         tooltip.style.top = (m.y - 20) + "px";
         tooltip.style.opacity = 1;
         drawDotAtScreenX(markerScreenX, m.y, m.color || "#fff");
-
         const visibleX = markerScreenX, margin = 60, vw = scroll.clientWidth;
         if (!pauseAutoScroll && !userScrolling) {
           if (visibleX < margin) easeScrollTo(Math.max(0, m.x - margin), markerScreenX);
           else if (visibleX > vw - margin) easeScrollTo(Math.min(cssW - vw, m.x - (vw - margin)), markerScreenX);
         }
+        console.log("[FB] tap hit marker", m);
         return;
       }
     }
@@ -665,6 +740,7 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
     }
 
     drawDotAtScreenX(screenX, y, "#fff");
+    console.log("[FB] tap normal point", { hourIndex, y });
   }
 
   canvas.removeEventListener("pointerdown", canvas._hourlyTapHandler);
@@ -696,6 +772,8 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
     userScrollTimer = setTimeout(() => { userScrolling = false; }, USER_SCROLL_IDLE);
   };
   scroll.addEventListener("touchmove", scroll._hourlyTouchMove, { passive: true });
+
+  console.log("[FB] setupHourlyTap() done");
 }
 
 // -----------------------------
@@ -703,19 +781,16 @@ export function setupHourlyTap(temps, labels, conditions, symbol) {
 // -----------------------------
 export function buildDaily(daily) {
   const dailyForecastEl = document.getElementById("dailyForecast");
-  if (!dailyForecastEl) return;
+  if (!dailyForecastEl) { console.warn("[FB] buildDaily: #dailyForecast not found"); return; }
   dailyForecastEl.innerHTML = "";
   const units = getUnitParams();
-
   if (!daily || !daily.time) return;
 
   for (let i = 0; i < daily.time.length; i++) {
     const row = document.createElement("div");
     row.className = "daily-row";
     const date = new Date(daily.time[i]).toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric"
+      weekday: "short", month: "short", day: "numeric"
     });
     row.innerHTML = `
       <div>${date}</div>
@@ -725,4 +800,5 @@ export function buildDaily(daily) {
     `;
     dailyForecastEl.appendChild(row);
   }
+  console.log("[FB] buildDaily done", { days: daily.time.length });
 }

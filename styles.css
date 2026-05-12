@@ -177,6 +177,7 @@ body{
   white-space:nowrap;
   scroll-behavior:auto; /* JS controls easing */
   -webkit-overflow-scrolling:auto;
+  touch-action: pan-x;
 }
 
 /* inner wrapper */
