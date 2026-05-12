@@ -514,44 +514,24 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   const hourWidth = canvas._hourWidth;
   const DPR = canvas._DPR || 1;
 
-  // Helper: restore base image quickly
   function restoreBase() {
     if (!canvas._baseImage) return;
-    // putImageData expects device pixels
     ctx.putImageData(canvas._baseImage, 0, 0);
   }
 
-  // Keep a small RAF loop to smooth auto-scroll and avoid race conditions
   let pending = false;
   let lastEvent = null;
 
   function processMouse(e) {
     const rect = scroll.getBoundingClientRect();
     const xInScroll = e.clientX - rect.left;
-    // worldX in CSS pixels (not device pixels)
     let worldX = scroll.scrollLeft + xInScroll;
 
-    // Clamp worldX to [0, dense.length-1]
+    // clamp
     if (worldX < 0) worldX = 0;
     if (worldX >= dense.length) worldX = dense.length - 1;
 
-    // Auto-scroll when cursor near edges (do this BEFORE computing final worldX)
-    const edge = 80;
-    const speed = 10;
-    if (xInScroll < edge) {
-      scroll.scrollLeft = Math.max(0, scroll.scrollLeft - speed);
-      // recompute worldX after scroll
-      worldX = scroll.scrollLeft + xInScroll;
-    } else if (xInScroll > rect.width - edge) {
-      scroll.scrollLeft = Math.min(canvas.width - rect.width, scroll.scrollLeft + speed);
-      worldX = scroll.scrollLeft + xInScroll;
-    }
-
-    // Ensure worldX still in bounds
-    if (worldX < 0) worldX = 0;
-    if (worldX >= dense.length) worldX = dense.length - 1;
-
-    // Get dense point at nearest integer worldX
+    // pick nearest dense point BEFORE auto-scroll to test visibility
     const idx = Math.round(worldX);
     const p = dense[idx];
     if (!p || p.y === null) {
@@ -560,43 +540,44 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       return;
     }
 
-    // Map mouse Y into canvas coordinates (CSS pixels)
     const mouseY = e.clientY - rect.top;
+    const visibleThreshold = 25;
 
-    // If cursor is too far vertically, hide dot
-    if (Math.abs(mouseY - p.y) > 25) {
+    // If cursor is NOT close enough to the line, do NOT auto-scroll and hide dot
+    if (Math.abs(mouseY - p.y) > visibleThreshold) {
       tooltip.style.opacity = 0;
       restoreBase();
       return;
     }
 
-    // Keep the dot visible: if dot is near left/right viewport edge, nudge scroll to center it
+    // At this point the dot should be visible — perform auto-scroll if needed
+    const margin = 60; // px margin inside viewport
     const visibleX = p.x - scroll.scrollLeft;
-    const margin = 60; // px margin inside scroll viewport
+    const viewportW = rect.width;
+
+    // If dot is too close to left or right edge, nudge scroll so it stays visible
     if (visibleX < margin) {
-      // center dot with margin
       scroll.scrollLeft = Math.max(0, p.x - margin);
-    } else if (visibleX > rect.width - margin) {
-      scroll.scrollLeft = Math.min(canvas.width - rect.width, p.x - (rect.width - margin));
+    } else if (visibleX > viewportW - margin) {
+      scroll.scrollLeft = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
     }
 
-    // After any scroll adjustment, recompute visibleX and tooltip position
+    // Recompute visibleX after any scroll change
     const visibleX2 = p.x - scroll.scrollLeft;
 
-    // Determine hour index for tooltip
-    const hourIndex = Math.floor(p.x / hourWidth + 0.5); // nearest hour center
-    const safeHourIndex = Math.max(0, Math.min(temps.length - 1, hourIndex));
+    // Determine hour index for tooltip (nearest hour center)
+    const hourIndex = Math.max(0, Math.min(temps.length - 1, Math.floor(p.x / hourWidth + 0.5)));
 
     tooltip.innerHTML = `
-      <strong>${labels[safeHourIndex]}</strong><br>
-      ${Math.round(temps[safeHourIndex])}${symbol}<br>
-      ${conditions[safeHourIndex]}
+      <strong>${labels[hourIndex]}</strong><br>
+      ${Math.round(temps[hourIndex])}${symbol}<br>
+      ${conditions[hourIndex]}
     `;
     tooltip.style.opacity = 1;
     tooltip.style.left = (visibleX2) + "px";
     tooltip.style.top = (p.y - 20) + "px";
 
-    // Draw dot quickly by restoring base image and drawing circle
+    // Draw dot by restoring base and painting circle
     restoreBase();
     ctx.fillStyle = "#fff";
     ctx.beginPath();
@@ -604,7 +585,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     ctx.fill();
   }
 
-  // Mouse handler schedules RAF to avoid multiple scroll+draw races
   scroll.onmousemove = (e) => {
     lastEvent = e;
     if (!pending) {
@@ -616,7 +596,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     }
   };
 
-  // Hide on leave
   scroll.onmouseleave = () => {
     tooltip.style.opacity = 0;
     restoreBase();
