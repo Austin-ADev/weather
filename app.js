@@ -422,21 +422,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.clearRect(0, 0, w, h);
 
   // -----------------------------
-  // Hour segment bars
-  // -----------------------------
-  ctx.strokeStyle = "#ffffff22";
-  ctx.lineWidth = 1;
-
-  for (let i = 0; i < temps.length; i++) {
-    const x = i * hourWidth;
-    ctx.beginPath();
-    ctx.moveTo(x, pad);
-    ctx.lineTo(x, h - pad);
-    ctx.stroke();
-  }
-
-  // -----------------------------
-  // Temperature line
+  // Temperature line (no bars)
   // -----------------------------
   ctx.beginPath();
   ctx.lineWidth = 3;
@@ -475,7 +461,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.fill();
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
 
-  // Save points globally for hover dot
+  // Save points for hover dot
   canvas._chartPoints = points;
   canvas._min = min;
   canvas._max = max;
