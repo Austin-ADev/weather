@@ -445,7 +445,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   // High marker
   // -----------------------------
   const hiIndex = temps.indexOf(max);
-  ctx.fillStyle = accent;
+  ctx.fillStyle = "#bd1818";
   ctx.beginPath();
   ctx.arc(points[hiIndex].x, points[hiIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
@@ -455,7 +455,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   // Low marker
   // -----------------------------
   const loIndex = temps.indexOf(min);
-  ctx.fillStyle = "#ffffffaa";
+  ctx.fillStyle = "#183eb9fa";
   ctx.beginPath();
   ctx.arc(points[loIndex].x, points[loIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
