@@ -404,7 +404,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     .getPropertyValue("--accent")
     .trim() || "#4fd1ff";
 
-  const hourWidth = 80; // MUST MATCH forecast-hour width
+  const hourWidth = 80; // must match your forecast-hour width
   const totalWidth = hourWidth * temps.length;
 
   canvas.width = totalWidth;
@@ -420,31 +420,51 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
 
   ctx.clearRect(0, 0, w, h);
 
-  // -----------------------------
-  // Temperature line (aligned to boxes)
-  // -----------------------------
+  // =========================================================
+  // 1. Build a dense polyline (1px resolution)
+  // =========================================================
+  const densePoints = [];
+
+  for (let x = 0; x < w; x++) {
+    const hourIndex = x / hourWidth;
+    const i = Math.floor(hourIndex);
+
+    if (i < 0 || i >= temps.length - 1) continue;
+
+    const t = hourIndex - i;
+
+    const y1 = h - pad - ((temps[i] - min) / (max - min)) * (h - pad * 2);
+    const y2 = h - pad - ((temps[i + 1] - min) / (max - min)) * (h - pad * 2);
+
+    const y = y1 + (y2 - y1) * t;
+
+    densePoints.push({ x, y });
+  }
+
+  // =========================================================
+  // 2. Draw the line using dense points
+  // =========================================================
   ctx.beginPath();
   ctx.lineWidth = 3;
   ctx.strokeStyle = accent;
 
-  const points = [];
-
-  temps.forEach((t, i) => {
-    // CENTER OF EACH HOURLY BOX
-    const x = i * hourWidth + hourWidth / 2;
-    const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
-
-    points.push({ x, y });
-
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+  densePoints.forEach((p, i) => {
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
   });
 
   ctx.stroke();
 
-  // -----------------------------
-  // High marker
-  // -----------------------------
+  // =========================================================
+  // 3. High + Low markers (still based on hour centers)
+  // =========================================================
+  const points = temps.map((t, i) => {
+    const x = i * hourWidth + hourWidth / 2;
+    const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
+    return { x, y };
+  });
+
+  // High
   const hiIndex = temps.indexOf(max);
   ctx.fillStyle = "#bd1818";
   ctx.beginPath();
@@ -452,9 +472,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.fill();
   ctx.fillText(`High: ${Math.round(max)}${symbol}`, points[hiIndex].x + 8, points[hiIndex].y - 8);
 
-  // -----------------------------
-  // Low marker
-  // -----------------------------
+  // Low
   const loIndex = temps.indexOf(min);
   ctx.fillStyle = "#183eb9fa";
   ctx.beginPath();
@@ -462,8 +480,10 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.fill();
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
 
-  // Save points for hover dot
-  canvas._chartPoints = points;
+  // =========================================================
+  // 4. Save dense points for hover
+  // =========================================================
+  canvas._densePoints = densePoints;
   canvas._hourWidth = hourWidth;
 }
 
@@ -474,7 +494,7 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   const canvas = document.getElementById("hourlyChart");
   const ctx = canvas.getContext("2d");
 
-  const points = canvas._chartPoints;
+  const dense = canvas._densePoints;
   const hourWidth = canvas._hourWidth;
 
   scroll.onmousemove = (e) => {
@@ -482,53 +502,33 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const xInScroll = e.clientX - rect.left;
     const worldX = scroll.scrollLeft + xInScroll;
 
-    // -----------------------------
-    // AUTO-SCROLL WHEN NEAR EDGES
-    // -----------------------------
+    // Auto-scroll
     const edge = 80;
     const speed = 8;
-
     if (xInScroll < edge) scroll.scrollLeft -= speed;
     else if (xInScroll > rect.width - edge) scroll.scrollLeft += speed;
 
-    // -----------------------------
-    // FIND WHICH TWO POINTS SURROUND THE CURSOR
-    // -----------------------------
-    let i = Math.floor(worldX / hourWidth);
-    if (i < 0 || i >= points.length - 1) {
+    // Out of bounds
+    if (worldX < 0 || worldX >= dense.length) {
       tooltip.style.opacity = 0;
       drawHourlyChart(temps, labels, symbol, conditions);
       return;
     }
 
-    const p1 = points[i];
-    const p2 = points[i + 1];
+    const p = dense[Math.floor(worldX)];
 
-    // -----------------------------
-    // TRUE INTERPOLATION USING CURSOR X
-    // -----------------------------
-    const t = (worldX - p1.x) / (p2.x - p1.x);
-    const interpX = worldX;              // EXACT cursor X
-    const interpY = p1.y + (p2.y - p1.y) * t; // LINE Y at cursor X
-
-    // -----------------------------
-    // CHECK IF CURSOR IS CLOSE TO THE LINE
-    // -----------------------------
+    // Check vertical distance
     const mouseY = e.clientY - rect.top;
-    if (Math.abs(mouseY - interpY) > 25) {
+    if (Math.abs(mouseY - p.y) > 25) {
       tooltip.style.opacity = 0;
       drawHourlyChart(temps, labels, symbol, conditions);
       return;
     }
 
-    // -----------------------------
-    // DETERMINE HOUR FOR TOOLTIP
-    // -----------------------------
+    // Determine hour
     const hourIndex = Math.floor(worldX / hourWidth);
 
-    // -----------------------------
-    // TOOLTIP
-    // -----------------------------
+    // Tooltip
     tooltip.innerHTML = `
       <strong>${labels[hourIndex]}</strong><br>
       ${Math.round(temps[hourIndex])}${symbol}<br>
@@ -536,17 +536,14 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     `;
 
     tooltip.style.opacity = 1;
-    tooltip.style.left = (interpX - scroll.scrollLeft) + "px";
-    tooltip.style.top = (interpY - 20) + "px";
+    tooltip.style.left = (p.x - scroll.scrollLeft) + "px";
+    tooltip.style.top = (p.y - 20) + "px";
 
-    // -----------------------------
-    // DRAW DOT EXACTLY UNDER CURSOR
-    // -----------------------------
+    // Draw dot
     drawHourlyChart(temps, labels, symbol, conditions);
-
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(interpX, interpY, 5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
     ctx.fill();
   };
 
