@@ -399,8 +399,15 @@ function drawHourlyChart(temps, labels, symbol) {
     .getPropertyValue("--accent")
     .trim() || "#4fd1ff";
 
-  const w = canvas.width = canvas.offsetWidth;
-  const h = canvas.height = canvas.offsetHeight;
+  // MATCH HOURLY BOX WIDTH
+  const hourWidth = 80; // adjust to match your CSS
+  const totalWidth = hourWidth * temps.length;
+
+  canvas.width = totalWidth;
+  canvas.height = 120;
+
+  const w = canvas.width;
+  const h = canvas.height;
 
   const max = Math.max(...temps);
   const min = Math.min(...temps);
@@ -410,9 +417,7 @@ function drawHourlyChart(temps, labels, symbol) {
 
   ctx.clearRect(0, 0, w, h);
 
-  // -----------------------------
-  // LINE (accent color)
-  // -----------------------------
+  // LINE
   ctx.beginPath();
   ctx.lineWidth = 3;
   ctx.strokeStyle = accent;
@@ -420,16 +425,13 @@ function drawHourlyChart(temps, labels, symbol) {
   temps.forEach((t, i) => {
     const x = i * step;
     const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
-
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
 
   ctx.stroke();
 
-  // -----------------------------
-  // HIGH POINT MARKER (accent)
-  // -----------------------------
+  // HIGH POINT
   const hiIndex = temps.indexOf(max);
   const hiX = hiIndex * step;
   const hiY = h - pad - ((max - min) / (max - min)) * (h - pad * 2);
@@ -439,9 +441,6 @@ function drawHourlyChart(temps, labels, symbol) {
   ctx.arc(hiX, hiY, 5, 0, Math.PI * 2);
   ctx.fill();
 
-  // -----------------------------
-  // HIGH LABEL (accent)
-  // -----------------------------
   ctx.fillStyle = accent;
   ctx.font = "14px system-ui";
   ctx.fillText(`High: ${Math.round(max)}${symbol}`, hiX + 8, hiY - 8);

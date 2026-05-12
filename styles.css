@@ -517,3 +517,24 @@ body::before {
   overflow-x: auto;
   white-space: nowrap;
 }
+#hourlyScroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  position: relative;
+}
+
+#hourlyInner {
+  display: inline-block;
+  position: relative;
+}
+
+#hourlyChart {
+  height: 120px;
+  display: block;
+  pointer-events: none;
+}
+
+#forecast {
+  display: inline-flex;
+}
