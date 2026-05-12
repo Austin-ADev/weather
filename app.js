@@ -400,13 +400,14 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   const canvas = document.getElementById("hourlyChart");
   const ctx = canvas.getContext("2d");
   const tooltip = document.getElementById("hourlyTooltip");
+  const cursor = document.getElementById("hourlyCursor");
   const scroll = document.getElementById("hourlyScroll");
 
   const accent = getComputedStyle(document.documentElement)
     .getPropertyValue("--accent")
     .trim() || "#4fd1ff";
 
-  const hourWidth = 80; 
+  const hourWidth = 80;
   const totalWidth = hourWidth * temps.length;
 
   canvas.width = totalWidth;
@@ -444,9 +445,13 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   ctx.lineWidth = 3;
   ctx.strokeStyle = accent;
 
+  const points = [];
+
   temps.forEach((t, i) => {
     const x = i * step;
     const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
+    points.push({ x, y });
+
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -457,63 +462,70 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   // High marker
   // -----------------------------
   const hiIndex = temps.indexOf(max);
-  const hiX = hiIndex * step;
-  const hiY = h - pad - ((max - min) / (max - min)) * (h - pad * 2);
-
   ctx.fillStyle = accent;
   ctx.beginPath();
-  ctx.arc(hiX, hiY, 5, 0, Math.PI * 2);
+  ctx.arc(points[hiIndex].x, points[hiIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillText(`High: ${Math.round(max)}${symbol}`, hiX + 8, hiY - 8);
+  ctx.fillText(`High: ${Math.round(max)}${symbol}`, points[hiIndex].x + 8, points[hiIndex].y - 8);
 
   // -----------------------------
   // Low marker
   // -----------------------------
   const loIndex = temps.indexOf(min);
-  const loX = loIndex * step;
-  const loY = h - pad - ((min - min) / (max - min)) * (h - pad * 2);
-
   ctx.fillStyle = "#ffffffaa";
   ctx.beginPath();
-  ctx.arc(loX, loY, 5, 0, Math.PI * 2);
+  ctx.arc(points[loIndex].x, points[loIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillText(`Low: ${Math.round(min)}${symbol}`, loX + 8, loY + 14);
+  ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
 
   // -----------------------------
   // Hover interaction
   // -----------------------------
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
+
+    // Correct mouse X for scroll offset
     const x = e.clientX - rect.left + scroll.scrollLeft;
 
-    const index = Math.floor(x / hourWidth);
-    if (index < 0 || index >= temps.length) {
-      tooltip.style.opacity = 0;
-      return;
+    // Find nearest point
+    let nearest = 0;
+    let bestDist = Infinity;
+
+    for (let i = 0; i < points.length; i++) {
+      const dx = Math.abs(points[i].x - x);
+      if (dx < bestDist) {
+        bestDist = dx;
+        nearest = i;
+      }
     }
 
-    const t = temps[index];
-    const label = labels[index];
-    const cond = conditions[index];
+    const p = points[nearest];
 
+    // Move cursor line
+    cursor.style.left = (p.x - scroll.scrollLeft) + "px";
+    cursor.style.top = rect.top + "px";
+    cursor.style.opacity = 1;
+
+    // Tooltip content
     tooltip.innerHTML = `
-      <strong>${label}</strong><br>
-      ${Math.round(t)}${symbol}<br>
-      ${cond}
+      <strong>${labels[nearest]}</strong><br>
+      ${Math.round(temps[nearest])}${symbol}<br>
+      ${conditions[nearest]}
     `;
 
-    tooltip.style.left = (e.clientX - rect.left) + "px";
-    tooltip.style.top = (e.clientY - rect.top) + "px";
+    // Tooltip position
+    tooltip.style.left = (p.x - scroll.scrollLeft) + "px";
+    tooltip.style.top = (p.y - 20) + "px";
     tooltip.style.opacity = 1;
   };
 
   canvas.onmouseleave = () => {
     tooltip.style.opacity = 0;
+    cursor.style.opacity = 0;
   };
 }
-
 
 function buildDaily(daily) {
   dailyForecastEl.innerHTML = "";
