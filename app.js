@@ -474,8 +474,8 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   const canvas = document.getElementById("hourlyChart");
   const ctx = canvas.getContext("2d");
 
-  const hourWidth = 80;
   const points = canvas._chartPoints;
+  const hourWidth = canvas._hourWidth;
 
   scroll.onmousemove = (e) => {
     const rect = scroll.getBoundingClientRect();
@@ -483,32 +483,45 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const worldX = scroll.scrollLeft + xInScroll;
 
     // -----------------------------
-    // 1. Find nearest point on the line (continuous)
+    // 1. Find the two points around the cursor
     // -----------------------------
-    let nearest = 0;
-    let bestDist = Infinity;
-
-    for (let i = 0; i < points.length; i++) {
-      const dx = Math.abs(points[i].x - worldX);
-      if (dx < bestDist) {
-        bestDist = dx;
-        nearest = i;
-      }
+    let i = Math.floor(worldX / hourWidth);
+    if (i < 0 || i >= points.length - 1) {
+      tooltip.style.opacity = 0;
+      drawHourlyChart(temps, labels, symbol, conditions);
+      return;
     }
 
-    const p = points[nearest];
+    const p1 = points[i];
+    const p2 = points[i + 1];
 
     // -----------------------------
-    // 2. Determine which hour segment the mouse is in
+    // 2. Interpolate Y between p1 and p2
     // -----------------------------
-    const hourIndex = Math.floor(worldX / hourWidth);
-    if (hourIndex < 0 || hourIndex >= temps.length) {
+    const t = (worldX - p1.x) / (p2.x - p1.x);
+    const interpX = worldX;
+    const interpY = p1.y + (p2.y - p1.y) * t;
+
+    // -----------------------------
+    // 3. Check if cursor is close to the line
+    // -----------------------------
+    const mouseY = e.clientY - rect.top;
+    const dist = Math.abs(mouseY - interpY);
+
+    if (dist > 25) {
+      // Too far from the line → hide dot + tooltip
       tooltip.style.opacity = 0;
+      drawHourlyChart(temps, labels, symbol, conditions);
       return;
     }
 
     // -----------------------------
-    // 3. Tooltip content
+    // 4. Determine which hour segment we’re in
+    // -----------------------------
+    const hourIndex = Math.floor(worldX / hourWidth);
+
+    // -----------------------------
+    // 5. Tooltip content
     // -----------------------------
     tooltip.innerHTML = `
       <strong>${labels[hourIndex]}</strong><br>
@@ -517,16 +530,17 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     `;
 
     tooltip.style.opacity = 1;
-    tooltip.style.left = (p.x - scroll.scrollLeft) + "px";
-    tooltip.style.top = (p.y - 20) + "px";
+    tooltip.style.left = (interpX - scroll.scrollLeft) + "px";
+    tooltip.style.top = (interpY - 20) + "px";
 
     // -----------------------------
-    // 4. Draw hover dot (continuous)
+    // 6. Draw hover dot at interpolated point
     // -----------------------------
     drawHourlyChart(temps, labels, symbol, conditions); // redraw clean
+
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.arc(interpX, interpY, 5, 0, Math.PI * 2);
     ctx.fill();
   };
 
