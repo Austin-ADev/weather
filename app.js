@@ -529,11 +529,11 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   const DPR = canvas._DPR || 1;
   const markers = canvas._markers || [];
 
+  // helpers
   function restoreBase() {
     if (!canvas._baseImage) return;
     ctx.putImageData(canvas._baseImage, 0, 0);
   }
-
   function contrastColor(hex) {
     if (!hex) return "#fff";
     if (hex[0] === "#") hex = hex.slice(1);
@@ -544,7 +544,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     return lum > 150 ? "#000" : "#fff";
   }
-
   function resetTooltipStyle() {
     tooltip.style.background = "";
     tooltip.style.color = "";
@@ -554,9 +553,8 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     tooltip.style.borderRadius = "";
   }
 
-  // Easing helper for smooth scroll
-  function easeTo(target, factor = 0.18) {
-    // factor: 0.05 (very slow) -> 0.25 (faster). Default 0.18 is gentle.
+  // easing scroll helper (gentle)
+  function easeTo(target, factor = 0.12) {
     const current = scroll.scrollLeft;
     const delta = target - current;
     if (Math.abs(delta) < 0.5) { scroll.scrollLeft = target; return; }
@@ -573,31 +571,33 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     return false;
   }
 
-  let pending = false;
-  let lastEvent = null;
+  // state for touch dragging
+  let dragging = false;
+  let dragType = null; // "marker" or "line"
+  let dragMarker = null;
+  let activeTouchId = null;
 
-  function processMouse(e) {
-    const rect = scroll.getBoundingClientRect();
-    const xInScroll = e.clientX - rect.left;
-    let worldX = scroll.scrollLeft + xInScroll;
-
+  // shared mouse/touch processing (computes worldX, shows tooltip/dot)
+  function handleInteraction(worldX, clientY, allowAutoScroll = true) {
+    // clamp
     if (worldX < 0) worldX = 0;
     if (worldX >= dense.length) worldX = dense.length - 1;
 
-    const mouseY = e.clientY - rect.top;
+    const mouseY = clientY;
 
-    // 1) Marker detection with larger hit area
+    // 1) marker detection
     for (let m of markers) {
       if (pointInMarker(worldX, mouseY, m)) {
-        // marker hovered — gently center it if needed
+        // marker hovered/dragged
         const visibleX = m.x - scroll.scrollLeft;
         const margin = 60;
-        const viewportW = rect.width;
-        let targetScroll = null;
-        if (visibleX < margin) targetScroll = Math.max(0, m.x - margin);
-        else if (visibleX > viewportW - margin) targetScroll = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
-
-        if (targetScroll !== null) easeTo(targetScroll, 0.18);
+        const viewportW = scroll.getBoundingClientRect().width;
+        if (allowAutoScroll) {
+          let target = null;
+          if (visibleX < margin) target = Math.max(0, m.x - margin);
+          else if (visibleX > viewportW - margin) target = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
+          if (target !== null) easeTo(target, 0.12);
+        }
 
         const visibleX2 = m.x - scroll.scrollLeft;
         const bg = m.color || "#000";
@@ -623,18 +623,19 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
         ctx.beginPath();
         ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
         ctx.fill();
-        return;
+
+        return { hit: true, type: "marker", marker: m };
       }
     }
 
-    // 2) Line hover
+    // 2) line detection
     const idx = Math.round(worldX);
     const p = dense[idx];
     if (!p || p.y === null) {
       tooltip.style.opacity = 0;
       resetTooltipStyle();
       restoreBase();
-      return;
+      return { hit: false };
     }
 
     const visibleThreshold = 25;
@@ -642,18 +643,19 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
       tooltip.style.opacity = 0;
       resetTooltipStyle();
       restoreBase();
-      return;
+      return { hit: false };
     }
 
-    // Dot visible — gently nudge scroll to keep it in view (only small adjustments)
-    const margin = 60;
-    const visibleX = p.x - scroll.scrollLeft;
-    const viewportW = rect.width;
-    let targetScroll = null;
-    if (visibleX < margin) targetScroll = Math.max(0, p.x - margin);
-    else if (visibleX > viewportW - margin) targetScroll = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
-
-    if (targetScroll !== null) easeTo(targetScroll, 0.18);
+    // dot visible — auto-scroll gently if allowed
+    if (allowAutoScroll) {
+      const margin = 60;
+      const visibleX = p.x - scroll.scrollLeft;
+      const viewportW = scroll.getBoundingClientRect().width;
+      let target = null;
+      if (visibleX < margin) target = Math.max(0, p.x - margin);
+      else if (visibleX > viewportW - margin) target = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
+      if (target !== null) easeTo(target, 0.12);
+    }
 
     const visibleX2 = p.x - scroll.scrollLeft;
     const hourIndex = Math.max(0, Math.min(temps.length - 1, Math.floor(p.x / hourWidth + 0.5)));
@@ -673,24 +675,116 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     ctx.beginPath();
     ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
     ctx.fill();
+
+    return { hit: true, type: "line", point: p };
   }
 
+  // ---------- Desktop mouse handlers (unchanged behavior) ----------
+  let pending = false;
+  let lastMouseEvent = null;
   scroll.onmousemove = (e) => {
-    lastEvent = e;
+    // ignore mouse events while dragging on touch
+    if (dragging) return;
+    lastMouseEvent = e;
     if (!pending) {
       pending = true;
       requestAnimationFrame(() => {
-        processMouse(lastEvent);
+        const rect = scroll.getBoundingClientRect();
+        const xInScroll = lastMouseEvent.clientX - rect.left;
+        const worldX = scroll.scrollLeft + xInScroll;
+        handleInteraction(worldX, lastMouseEvent.clientY, true);
         pending = false;
       });
     }
   };
-
   scroll.onmouseleave = () => {
+    if (dragging) return;
     tooltip.style.opacity = 0;
     resetTooltipStyle();
     restoreBase();
   };
+
+  // ---------- Touch handlers for mobile drag ----------
+  // touchstart: only begin dragging if touch starts near line or marker
+  scroll.addEventListener("touchstart", (ev) => {
+    if (!ev.touches || ev.touches.length === 0) return;
+    const t = ev.touches[0];
+    const rect = scroll.getBoundingClientRect();
+    const xInScroll = t.clientX - rect.left;
+    const worldX = scroll.scrollLeft + xInScroll;
+    const mouseY = t.clientY - rect.top;
+
+    // test marker first
+    for (let m of markers) {
+      if (pointInMarker(worldX, mouseY, m)) {
+        dragging = true;
+        dragType = "marker";
+        dragMarker = m;
+        activeTouchId = t.identifier;
+        ev.preventDefault();
+        handleInteraction(worldX, mouseY, true);
+        return;
+      }
+    }
+
+    // test line proximity
+    const idx = Math.round(worldX);
+    const p = dense[idx];
+    if (p && p.y !== null && Math.abs(mouseY - p.y) <= 25) {
+      dragging = true;
+      dragType = "line";
+      dragMarker = null;
+      activeTouchId = t.identifier;
+      ev.preventDefault();
+      handleInteraction(worldX, mouseY, true);
+      return;
+    }
+
+    // otherwise do not start dragging; allow normal page scroll
+  }, { passive: false });
+
+  // touchmove: if dragging, update dot position and slowly auto-scroll
+  scroll.addEventListener("touchmove", (ev) => {
+    if (!dragging) return;
+    // find the active touch
+    let touch = null;
+    for (let i = 0; i < ev.touches.length; i++) {
+      if (ev.touches[i].identifier === activeTouchId) { touch = ev.touches[i]; break; }
+    }
+    if (!touch) return;
+    ev.preventDefault(); // prevent page scroll while dragging
+
+    const rect = scroll.getBoundingClientRect();
+    const xInScroll = touch.clientX - rect.left;
+    let worldX = scroll.scrollLeft + xInScroll;
+    const mouseY = touch.clientY - rect.top;
+
+    // When dragging, we want slower auto-scroll. allowAutoScroll true but easing will be gentle.
+    handleInteraction(worldX, touch.clientY, true);
+  }, { passive: false });
+
+  // touchend / touchcancel: stop dragging
+  function endTouch(ev) {
+    // if the active touch ended, stop dragging
+    if (!dragging) return;
+    // if there are still touches, check if activeTouchId remains
+    if (ev.touches && ev.touches.length > 0) {
+      let stillActive = false;
+      for (let i = 0; i < ev.touches.length; i++) {
+        if (ev.touches[i].identifier === activeTouchId) { stillActive = true; break; }
+      }
+      if (stillActive) return; // still dragging
+    }
+    dragging = false;
+    dragType = null;
+    dragMarker = null;
+    activeTouchId = null;
+    tooltip.style.opacity = 0;
+    resetTooltipStyle();
+    restoreBase();
+  }
+  scroll.addEventListener("touchend", endTouch, { passive: true });
+  scroll.addEventListener("touchcancel", endTouch, { passive: true });
 }
 
 // DAILY FORECAST
