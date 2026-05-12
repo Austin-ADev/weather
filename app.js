@@ -471,52 +471,59 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
 function setupHourlyHover(temps, labels, conditions, symbol) {
   const scroll = document.getElementById("hourlyScroll");
   const tooltip = document.getElementById("hourlyTooltip");
-  const cursor = document.getElementById("hourlyCursor");
   const canvas = document.getElementById("hourlyChart");
+  const ctx = canvas.getContext("2d");
 
   const hourWidth = 80;
+  const points = canvas._chartPoints;
 
   scroll.onmousemove = (e) => {
     const rect = scroll.getBoundingClientRect();
     const xInScroll = e.clientX - rect.left;
     const worldX = scroll.scrollLeft + xInScroll;
 
-    let index = Math.floor(worldX / hourWidth);
-    if (index < 0 || index >= temps.length) {
+    // -----------------------------
+    // 1. Find nearest point on the line (continuous)
+    // -----------------------------
+    let nearest = 0;
+    let bestDist = Infinity;
+
+    for (let i = 0; i < points.length; i++) {
+      const dx = Math.abs(points[i].x - worldX);
+      if (dx < bestDist) {
+        bestDist = dx;
+        nearest = i;
+      }
+    }
+
+    const p = points[nearest];
+
+    // -----------------------------
+    // 2. Determine which hour segment the mouse is in
+    // -----------------------------
+    const hourIndex = Math.floor(worldX / hourWidth);
+    if (hourIndex < 0 || hourIndex >= temps.length) {
       tooltip.style.opacity = 0;
-      cursor.style.opacity = 0;
       return;
     }
 
-    const centerX = index * hourWidth + hourWidth / 2;
-
-    // Cursor line
-    cursor.style.opacity = 1;
-    cursor.style.left = (centerX - scroll.scrollLeft) + "px";
-
-    // Tooltip content
+    // -----------------------------
+    // 3. Tooltip content
+    // -----------------------------
     tooltip.innerHTML = `
-      <strong>${labels[index]}</strong><br>
-      ${Math.round(temps[index])}${symbol}<br>
-      ${conditions[index]}
+      <strong>${labels[hourIndex]}</strong><br>
+      ${Math.round(temps[hourIndex])}${symbol}<br>
+      ${conditions[hourIndex]}
     `;
 
     tooltip.style.opacity = 1;
-    tooltip.style.left = (centerX - scroll.scrollLeft) + "px";
-    tooltip.style.top = "110px";
+    tooltip.style.left = (p.x - scroll.scrollLeft) + "px";
+    tooltip.style.top = (p.y - 20) + "px";
 
     // -----------------------------
-    // Hover dot on the line
+    // 4. Draw hover dot (continuous)
     // -----------------------------
-    const points = canvas._chartPoints;
-    if (!points) return;
-
-    const p = points[index];
-
-    // Draw hover dot
-    const ctx = canvas.getContext("2d");
-    drawHourlyChart(temps, labels, symbol, conditions); // redraw chart cleanly
-
+    drawHourlyChart(temps, labels, symbol, conditions); // redraw clean
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
@@ -525,11 +532,6 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
 
   scroll.onmouseleave = () => {
     tooltip.style.opacity = 0;
-    cursor.style.opacity = 0;
-
-    // Redraw chart without hover dot
-    const canvas = document.getElementById("hourlyChart");
-    const ctx = canvas.getContext("2d");
     drawHourlyChart(temps, labels, symbol, conditions);
   };
 }
