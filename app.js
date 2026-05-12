@@ -524,277 +524,184 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
   const canvas = document.getElementById("hourlyChart");
   const ctx = canvas.getContext("2d");
 
-  // Ensure dense points exist; if not, redraw chart once
-  if (!canvas._densePoints) {
-    drawHourlyChart(temps, labels, symbol, conditions);
-  }
+  if (!canvas._densePoints) drawHourlyChart(temps, labels, symbol, conditions);
 
   const dense = canvas._densePoints || [];
   const hourWidth = canvas._hourWidth || 80;
-  const DPR = canvas._DPR || 1;
   const markers = canvas._markers || [];
 
-  // Cached base image (device pixels) and helper to restore it
+  // restore base image (device pixels)
   function restoreBase() {
     if (!canvas._baseImage) return;
-    // putImageData expects device pixel coords; baseImage was captured at device pixels
     ctx.putImageData(canvas._baseImage, 0, 0);
   }
 
+  // small safe contrast helper
   function contrastColor(hex) {
     if (!hex) return "#fff";
     if (hex[0] === "#") hex = hex.slice(1);
     if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
-    const r = parseInt(hex.substr(0,2), 16);
-    const g = parseInt(hex.substr(2,2), 16);
-    const b = parseInt(hex.substr(4,2), 16);
-    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+    const lum = 0.2126*r + 0.7152*g + 0.0722*b;
     return lum > 150 ? "#000" : "#fff";
   }
 
-  function resetTooltipStyle() {
-    tooltip.style.background = "";
-    tooltip.style.color = "";
-    tooltip.style.border = "";
-    tooltip.style.padding = "";
-    tooltip.style.boxShadow = "";
-    tooltip.style.borderRadius = "";
-  }
-
-  // Smooth scroll loop variables
+  // smooth scroll loop
   let scrollTarget = null;
-  let scrollAnimating = false;
-  function startScrollLoop() {
-    if (scrollAnimating) return;
-    scrollAnimating = true;
-    function step() {
-      if (scrollTarget === null) { scrollAnimating = false; return; }
-      const cur = scroll.scrollLeft;
-      const delta = scrollTarget - cur;
-      const factor = 0.12; // smaller = slower
-      if (Math.abs(delta) < 0.5) {
-        scroll.scrollLeft = scrollTarget;
-        scrollTarget = null;
-        scrollAnimating = false;
-        return;
-      }
-      scroll.scrollLeft = cur + delta * factor;
-      requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
-  }
-  function easeTo(target) {
+  let scrolling = false;
+  function easeScrollTo(target) {
     scrollTarget = Math.max(0, Math.min(canvas.width - scroll.clientWidth, target));
-    startScrollLoop();
+    if (scrolling) return;
+    scrolling = true;
+    (function step() {
+      if (scrollTarget === null) { scrolling = false; return; }
+      const cur = scroll.scrollLeft;
+      const d = scrollTarget - cur;
+      const f = 0.12;
+      if (Math.abs(d) < 0.5) { scroll.scrollLeft = scrollTarget; scrollTarget = null; scrolling = false; return; }
+      scroll.scrollLeft = cur + d * f;
+      requestAnimationFrame(step);
+    })();
   }
 
   function pointInMarker(worldX, mouseY, marker) {
     const dx = Math.abs(worldX - marker.x);
     const dy = Math.abs(mouseY - marker.y);
     if (Math.hypot(dx, dy) <= (marker.hitRadius || 0)) return true;
-    const hw = (marker.hitBox && marker.hitBox.w) ? marker.hitBox.w / 2 : 0;
-    const hh = (marker.hitBox && marker.hitBox.h) ? marker.hitBox.h / 2 : 0;
-    if (dx <= hw && dy <= hh) return true;
-    return false;
+    const hw = (marker.hitBox && marker.hitBox.w) ? marker.hitBox.w/2 : 0;
+    const hh = (marker.hitBox && marker.hitBox.h) ? marker.hitBox.h/2 : 0;
+    return dx <= hw && dy <= hh;
   }
 
-  // Core interaction logic: worldX in CSS pixels, clientY is canvas-local Y (CSS pixels)
+  // worldX is CSS pixels relative to canvas left + scrollLeft
   function handleInteraction(worldX, clientY, allowAutoScroll = true) {
     if (worldX < 0) worldX = 0;
     if (worldX >= dense.length) worldX = dense.length - 1;
     const mouseY = clientY;
 
-    // 1) Marker detection (priority)
-    for (let m of markers) {
+    // marker priority
+    for (const m of markers) {
       if (pointInMarker(worldX, mouseY, m)) {
-        // gently nudge scroll so marker stays visible
         const visibleX = m.x - scroll.scrollLeft;
         const margin = 60;
-        const viewportW = scroll.clientWidth;
-        let target = null;
+        const vw = scroll.clientWidth;
         if (allowAutoScroll) {
-          if (visibleX < margin) target = Math.max(0, m.x - margin);
-          else if (visibleX > viewportW - margin) target = Math.min(canvas.width - viewportW, m.x - (viewportW - margin));
-          if (target !== null) easeTo(target);
+          if (visibleX < margin) easeScrollTo(Math.max(0, m.x - margin));
+          else if (visibleX > vw - margin) easeScrollTo(Math.min(canvas.width - vw, m.x - (vw - margin)));
         }
-
         const visibleX2 = m.x - scroll.scrollLeft;
         const bg = m.color || "#000";
         const fg = contrastColor(bg);
-
-        tooltip.innerHTML = `
-          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${bg};margin-right:8px;vertical-align:middle;border:1px solid rgba(0,0,0,0.12)"></span>
-          <strong style="vertical-align:middle;color:${fg}">${m.type.toUpperCase()}</strong>
-          <div style="color:${fg};margin-top:6px">${Math.round(m.temp)}${symbol}</div>
-        `;
-        tooltip.style.opacity = 1;
-        tooltip.style.left = (visibleX2) + "px";
+        tooltip.innerHTML = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${bg};margin-right:8px"></span>
+          <strong style="color:${fg}">${m.type.toUpperCase()}</strong><div style="color:${fg};margin-top:6px">${Math.round(m.temp)}${symbol}</div>`;
+        tooltip.style.left = visibleX2 + "px";
         tooltip.style.top = (m.y - 20) + "px";
         tooltip.style.background = bg;
         tooltip.style.color = fg;
         tooltip.style.padding = "8px 10px";
         tooltip.style.borderRadius = "6px";
         tooltip.style.boxShadow = "0 6px 18px rgba(0,0,0,0.18)";
-        tooltip.style.border = "1px solid rgba(0,0,0,0.08)";
-
+        tooltip.style.opacity = 1;
         restoreBase();
         ctx.fillStyle = m.color;
         ctx.beginPath();
-        ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
+        ctx.arc(m.x, m.y, 6, 0, Math.PI*2);
         ctx.fill();
-
         return { hit: true, type: "marker", marker: m };
       }
     }
 
-    // 2) Line detection
+    // line detection
     const idx = Math.round(worldX);
     const p = dense[idx];
-    if (!p || p.y === null) {
-      tooltip.style.opacity = 0;
-      resetTooltipStyle();
-      restoreBase();
-      return { hit: false };
-    }
-
+    if (!p || p.y === null) { tooltip.style.opacity = 0; restoreBase(); return { hit: false }; }
     const visibleThreshold = 25;
-    if (Math.abs(mouseY - p.y) > visibleThreshold) {
-      tooltip.style.opacity = 0;
-      resetTooltipStyle();
-      restoreBase();
-      return { hit: false };
-    }
+    if (Math.abs(mouseY - p.y) > visibleThreshold) { tooltip.style.opacity = 0; restoreBase(); return { hit: false }; }
 
-    // Dot visible — gently nudge scroll to keep it in view
     if (allowAutoScroll) {
       const margin = 60;
       const visibleX = p.x - scroll.scrollLeft;
-      const viewportW = scroll.clientWidth;
-      let target = null;
-      if (visibleX < margin) target = Math.max(0, p.x - margin);
-      else if (visibleX > viewportW - margin) target = Math.min(canvas.width - viewportW, p.x - (viewportW - margin));
-      if (target !== null) easeTo(target);
+      const vw = scroll.clientWidth;
+      if (visibleX < margin) easeScrollTo(Math.max(0, p.x - margin));
+      else if (visibleX > vw - margin) easeScrollTo(Math.min(canvas.width - vw, p.x - (vw - margin)));
     }
 
     const visibleX2 = p.x - scroll.scrollLeft;
     const hourIndex = Math.max(0, Math.min(temps.length - 1, Math.floor(p.x / hourWidth + 0.5)));
-
-    resetTooltipStyle();
-    tooltip.innerHTML = `
-      <strong>${labels[hourIndex]}</strong><br>
-      ${Math.round(temps[hourIndex])}${symbol}<br>
-      ${conditions[hourIndex]}
-    `;
-    tooltip.style.opacity = 1;
-    tooltip.style.left = (visibleX2) + "px";
+    tooltip.innerHTML = `<strong>${labels[hourIndex]}</strong><br>${Math.round(temps[hourIndex])}${symbol}<br>${conditions[hourIndex]}`;
+    tooltip.style.left = visibleX2 + "px";
     tooltip.style.top = (p.y - 20) + "px";
-
+    tooltip.style.opacity = 1;
+    tooltip.style.background = "";
+    tooltip.style.color = "";
+    tooltip.style.padding = "";
+    tooltip.style.boxShadow = "";
     restoreBase();
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
     ctx.fill();
-
     return { hit: true, type: "line", point: p };
   }
 
-  // Pointer state for dragging
-  let isDragging = false;
+  // pointer handling attached to canvas for consistent coords
+  let dragging = false;
   let activePointerId = null;
 
-  // Pointer event handlers attached to the canvas (captures pointer events reliably)
   function onPointerDown(ev) {
-    // only left mouse button for mouse
     if (ev.pointerType === "mouse" && ev.button !== 0) return;
-    const canvasRect = canvas.getBoundingClientRect();
-    const xInCanvas = ev.clientX - canvasRect.left;
+    const rect = canvas.getBoundingClientRect();
+    const xInCanvas = ev.clientX - rect.left;
     const worldX = scroll.scrollLeft + xInCanvas;
-    const mouseY = ev.clientY - canvasRect.top;
+    const canvasY = ev.clientY - rect.top;
 
-    // test markers first
-    for (let m of markers) {
-      if (pointInMarker(worldX, mouseY, m)) {
-        isDragging = true;
-        activePointerId = ev.pointerId;
-        try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
-        ev.preventDefault();
-        handleInteraction(worldX, mouseY, true);
-        return;
-      }
-    }
-
-    // test line proximity
-    const idx = Math.round(worldX);
-    const p = dense[idx];
-    if (p && p.y !== null && Math.abs(mouseY - p.y) <= 25) {
-      isDragging = true;
+    // start drag only if near line or marker
+    const res = handleInteraction(worldX, canvasY, false);
+    if (res.hit) {
+      dragging = true;
       activePointerId = ev.pointerId;
       try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
       ev.preventDefault();
-      handleInteraction(worldX, mouseY, true);
-      return;
-    }
-
-    // if not near line/marker and pointerType is mouse, still show hover
-    if (ev.pointerType === "mouse") {
-      handleInteraction(worldX, ev.clientY, true);
+    } else {
+      // if mouse and not dragging, still show hover without starting drag
+      if (ev.pointerType === "mouse") handleInteraction(worldX, ev.clientY, true);
     }
   }
 
   function onPointerMove(ev) {
-    const canvasRect = canvas.getBoundingClientRect();
-    const xInCanvas = ev.clientX - canvasRect.left;
+    const rect = canvas.getBoundingClientRect();
+    const xInCanvas = ev.clientX - rect.left;
     const worldX = scroll.scrollLeft + xInCanvas;
-    const mouseY = ev.clientY - canvasRect.top;
+    const canvasY = ev.clientY - rect.top;
 
-    if (isDragging) {
+    if (dragging) {
       if (ev.pointerId !== activePointerId) return;
       ev.preventDefault();
       handleInteraction(worldX, ev.clientY, true);
       return;
     }
 
-    // not dragging: mouse pointer acts as hover
     if (ev.pointerType === "mouse") {
       handleInteraction(worldX, ev.clientY, true);
     }
   }
 
-  function onPointerUp(ev) {
-    if (isDragging && ev.pointerId === activePointerId) {
-      isDragging = false;
+  function endPointer(ev) {
+    if (dragging && ev.pointerId === activePointerId) {
+      dragging = false;
       activePointerId = null;
       try { canvas.releasePointerCapture && canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
       tooltip.style.opacity = 0;
-      resetTooltipStyle();
       restoreBase();
     }
   }
 
-  function onPointerCancel(ev) {
-    if (isDragging && ev.pointerId === activePointerId) {
-      isDragging = false;
-      activePointerId = null;
-      try { canvas.releasePointerCapture && canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
-      tooltip.style.opacity = 0;
-      resetTooltipStyle();
-      restoreBase();
-    }
-  }
-
-  // Attach listeners
   canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
   window.addEventListener("pointermove", onPointerMove, { passive: false });
-  window.addEventListener("pointerup", onPointerUp, { passive: true });
-  window.addEventListener("pointercancel", onPointerCancel, { passive: true });
-
-  // When pointer leaves canvas and not dragging, hide tooltip
-  canvas.addEventListener("pointerleave", (ev) => {
-    if (!isDragging) {
-      tooltip.style.opacity = 0;
-      resetTooltipStyle();
-      restoreBase();
-    }
+  window.addEventListener("pointerup", endPointer, { passive: true });
+  window.addEventListener("pointercancel", endPointer, { passive: true });
+  canvas.addEventListener("pointerleave", () => {
+    if (!dragging) { tooltip.style.opacity = 0; restoreBase(); }
   }, { passive: true });
 }
 
