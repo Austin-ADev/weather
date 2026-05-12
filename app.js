@@ -407,13 +407,13 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   const hourWidth = 80;
   const totalWidth = hourWidth * temps.length;
 
-  // Handle devicePixelRatio so canvas coordinate space matches CSS size
+  // devicePixelRatio handling
   const DPR = window.devicePixelRatio || 1;
   canvas.style.width = totalWidth + "px";
   canvas.style.height = "120px";
   canvas.width = Math.round(totalWidth * DPR);
   canvas.height = Math.round(120 * DPR);
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // scale drawing to CSS pixels
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
   const w = totalWidth;
   const h = 120;
@@ -425,13 +425,9 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
 
   ctx.clearRect(0, 0, w, h);
 
-  // =========================================================
-  // 1) Build dense polyline aligned to hour centers (1px per worldX)
-  //    worldX runs from 0..(totalWidth-1) and maps directly to box centers
-  // =========================================================
+  // Build dense polyline aligned to hour centers
   const dense = new Array(w);
   for (let worldX = 0; worldX < w; worldX++) {
-    // fractional hour index where center of first box is at hourWidth/2
     const hourIndex = (worldX - hourWidth / 2) / hourWidth;
     const i = Math.floor(hourIndex);
 
@@ -449,9 +445,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     dense[worldX] = { x: worldX, y };
   }
 
-  // =========================================================
-  // 2) Draw the line using dense points
-  // =========================================================
+  // Draw the line
   ctx.beginPath();
   ctx.lineWidth = 3;
   ctx.strokeStyle = accent;
@@ -465,42 +459,59 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   }
   ctx.stroke();
 
-  // =========================================================
-  // 3) High / Low markers (still based on hour centers)
-  // =========================================================
+  // Compute hour-center points for markers
   const points = temps.map((t, i) => {
     const x = i * hourWidth + hourWidth / 2;
     const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
-    return { x, y };
+    return { x, y, temp: t, index: i };
   });
 
-  // High
+  // Prepare markers array (we'll save this for hover detection)
+  const markers = [];
+
+  // High marker
   const hiIndex = temps.indexOf(max);
-  ctx.fillStyle = "#bd1818";
+  const hiColor = "#bd1818";
+  ctx.fillStyle = hiColor;
   ctx.beginPath();
   ctx.arc(points[hiIndex].x, points[hiIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.fillText(`High: ${Math.round(max)}${symbol}`, points[hiIndex].x + 8, points[hiIndex].y - 8);
+  markers.push({
+    type: "high",
+    x: points[hiIndex].x,
+    y: points[hiIndex].y,
+    color: hiColor,
+    temp: max,
+    index: hiIndex
+  });
 
-  // Low
+  // Low marker
   const loIndex = temps.indexOf(min);
-  ctx.fillStyle = "#183eb9fa";
+  const loColor = "#183eb9fa";
+  ctx.fillStyle = loColor;
   ctx.beginPath();
   ctx.arc(points[loIndex].x, points[loIndex].y, 5, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.fillText(`Low: ${Math.round(min)}${symbol}`, points[loIndex].x + 8, points[loIndex].y + 14);
+  markers.push({
+    type: "low",
+    x: points[loIndex].x,
+    y: points[loIndex].y,
+    color: loColor,
+    temp: min,
+    index: loIndex
+  });
 
-  // =========================================================
-  // 4) Cache base image (so hover draws are cheap) and save dense points
-  // =========================================================
-  // Save the current canvas pixels as an ImageData so we can restore quickly
+  // Cache base image and data for hover
   const baseImage = ctx.getImageData(0, 0, Math.round(w * DPR), Math.round(h * DPR));
   canvas._baseImage = baseImage;
   canvas._densePoints = dense;
   canvas._hourWidth = hourWidth;
   canvas._DPR = DPR;
+  canvas._markers = markers;
 }
 
 // HOVER SYSTEM (with hover dot)
