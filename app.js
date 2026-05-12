@@ -483,7 +483,19 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const worldX = scroll.scrollLeft + xInScroll;
 
     // -----------------------------
-    // 1. Find the two points around the cursor
+    // AUTO-SCROLL WHEN NEAR EDGES
+    // -----------------------------
+    const edgeZone = 80; // px from left/right to start scrolling
+    const scrollSpeed = 6;
+
+    if (xInScroll < edgeZone) {
+      scroll.scrollLeft -= scrollSpeed;
+    } else if (xInScroll > rect.width - edgeZone) {
+      scroll.scrollLeft += scrollSpeed;
+    }
+
+    // -----------------------------
+    // FIND NEIGHBORING POINTS
     // -----------------------------
     let i = Math.floor(worldX / hourWidth);
     if (i < 0 || i >= points.length - 1) {
@@ -496,32 +508,31 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     const p2 = points[i + 1];
 
     // -----------------------------
-    // 2. Interpolate Y between p1 and p2
+    // INTERPOLATE DOT POSITION
     // -----------------------------
     const t = (worldX - p1.x) / (p2.x - p1.x);
     const interpX = worldX;
     const interpY = p1.y + (p2.y - p1.y) * t;
 
     // -----------------------------
-    // 3. Check if cursor is close to the line
+    // CHECK IF CURSOR IS CLOSE TO LINE
     // -----------------------------
     const mouseY = e.clientY - rect.top;
     const dist = Math.abs(mouseY - interpY);
 
     if (dist > 25) {
-      // Too far from the line → hide dot + tooltip
       tooltip.style.opacity = 0;
       drawHourlyChart(temps, labels, symbol, conditions);
       return;
     }
 
     // -----------------------------
-    // 4. Determine which hour segment we’re in
+    // DETERMINE HOUR SEGMENT
     // -----------------------------
     const hourIndex = Math.floor(worldX / hourWidth);
 
     // -----------------------------
-    // 5. Tooltip content
+    // TOOLTIP
     // -----------------------------
     tooltip.innerHTML = `
       <strong>${labels[hourIndex]}</strong><br>
@@ -534,9 +545,9 @@ function setupHourlyHover(temps, labels, conditions, symbol) {
     tooltip.style.top = (interpY - 20) + "px";
 
     // -----------------------------
-    // 6. Draw hover dot at interpolated point
+    // DRAW DOT EXACTLY UNDER CURSOR
     // -----------------------------
-    drawHourlyChart(temps, labels, symbol, conditions); // redraw clean
+    drawHourlyChart(temps, labels, symbol, conditions);
 
     ctx.fillStyle = "#fff";
     ctx.beginPath();
