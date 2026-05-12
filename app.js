@@ -404,7 +404,7 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
     .getPropertyValue("--accent")
     .trim() || "#4fd1ff";
 
-  const hourWidth = 80;
+  const hourWidth = 80; // MUST MATCH forecast-hour width
   const totalWidth = hourWidth * temps.length;
 
   canvas.width = totalWidth;
@@ -417,12 +417,11 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   const min = Math.min(...temps);
 
   const pad = 20;
-  const step = w / (temps.length - 1);
 
   ctx.clearRect(0, 0, w, h);
 
   // -----------------------------
-  // Temperature line (no bars)
+  // Temperature line (aligned to boxes)
   // -----------------------------
   ctx.beginPath();
   ctx.lineWidth = 3;
@@ -431,8 +430,10 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
   const points = [];
 
   temps.forEach((t, i) => {
-    const x = i * step;
+    // CENTER OF EACH HOURLY BOX
+    const x = i * hourWidth + hourWidth / 2;
     const y = h - pad - ((t - min) / (max - min)) * (h - pad * 2);
+
     points.push({ x, y });
 
     if (i === 0) ctx.moveTo(x, y);
@@ -463,12 +464,8 @@ function drawHourlyChart(temps, labels, symbol, conditions) {
 
   // Save points for hover dot
   canvas._chartPoints = points;
-  canvas._min = min;
-  canvas._max = max;
-  canvas._pad = pad;
   canvas._hourWidth = hourWidth;
 }
-
 
 // HOVER SYSTEM (with hover dot)
 function setupHourlyHover(temps, labels, conditions, symbol) {
