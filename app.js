@@ -5,7 +5,6 @@ import {
   drawHourlyChart,
   createBaseBitmapSnapshot,
   setupHourlyHover,
-  setupHourlyTap,
   buildDaily
 } from './forecast-builder.js';
 
